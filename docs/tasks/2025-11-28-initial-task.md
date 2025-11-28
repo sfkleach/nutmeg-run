@@ -1,6 +1,6 @@
 # Initial development
 
-## Part 1
+## Background
 
 The command line arguments are as follows:
 
@@ -66,6 +66,38 @@ type FunctionObject struct {
 }
 ```
 
-## Part 2
+## Next Steps
 
-... to be elaborated after Part 1 ...
+1. Set up SQLite3 integration
+  - Add SQLite3 dependency to conanfile.txt
+  - Update CMake configuration to link against SQLite3
+
+2. Implement bundle file reader
+  - Create classes to represent the database schema (EntryPoints, Bindings, DependsOn, etc.)
+  - Write SQLite3 query functions to read from the bundle file
+  - Parse the JSON-formatted Value field into FunctionObject structures
+
+3. Design the virtual machine core
+  - Define data structures for:
+      - The instruction set (matching the Go Instruction types)
+      - FunctionObject representation in C++
+      - Runtime stack and local variables
+      - Value representation (integers, strings, functions, etc.)
+
+4. Implement the instruction interpreter
+  - Create the main execution loop
+  - Implement handlers for each instruction type:
+      - PushInt, PushString
+      - PopLocal, PushLocal
+      - PushGlobal, CallGlobalCounted
+      - SyscallCounted
+
+5. Create the main entry point
+  - Parse command-line arguments (BUNDLE_FILE and ARGUMENTS)
+  - Open the bundle database
+  - Locate the main entry point
+  - Initialize the VM and start execution
+
+6. Add syscall infrastructure
+  - Implement basic syscalls that Nutmeg programs might need
+  - Create a registry for syscall functions
