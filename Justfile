@@ -1,6 +1,7 @@
 # Variables
 build-dir := "_build"
-binary := build-dir + "/MyApp"
+binary := build-dir + "/nutmeg-run"
+tests := build-dir + "/tests"
 
 [private]
 default:
@@ -43,9 +44,8 @@ clean:
     rm -f conan*.cmake conan*.sh deactivate_*.sh *.cmake CMakePresets.json
 
 # Run tests
-test:
-    just build
-    cd {{build-dir}} && ctest --output-on-failure
+test: build
+    {{tests}}
 
 # Add a package interactively
 add package-name:

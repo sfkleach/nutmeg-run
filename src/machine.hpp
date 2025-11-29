@@ -1,0 +1,76 @@
+#ifndef MACHINE_HPP
+#define MACHINE_HPP
+
+#include "value.hpp"
+#include "function_object.hpp"
+#include <vector>
+#include <unordered_map>
+#include <string>
+#include <memory>
+
+namespace nutmeg {
+
+// Heap-allocated string object.
+struct HeapString {
+    std::string value;
+};
+
+// The virtual machine with dual-stack architecture.
+class Machine {
+private:
+    // Operand stack (main data stack).
+    std::vector<Cell> operand_stack_;
+    
+    // Return stack (for function calls and local variables).
+    std::vector<Cell> return_stack_;
+    
+    // Global dictionary mapping names to values.
+    std::unordered_map<std::string, Cell> globals_;
+    
+    // Heap for objects (strings, function objects, etc.).
+    // For now, using simple vector with manual memory management.
+    // In a real implementation, this would be a garbage collector (defensive check).
+    std::vector<std::unique_ptr<HeapString>> string_heap_;
+    std::vector<std::unique_ptr<FunctionObject>> function_heap_;
+    
+    // Current function being executed (for local variable access).
+    FunctionObject* current_function_;
+    int pc_;  // Program counter.
+    
+public:
+    Machine();
+    ~Machine();
+    
+    // Stack operations.
+    void push(Cell value);
+    Cell pop();
+    Cell peek() const;
+    bool empty() const;
+    size_t stack_size() const;
+    
+    // Return stack operations.
+    void push_return(Cell value);
+    Cell pop_return();
+    
+    // Global dictionary operations.
+    void define_global(const std::string& name, Cell value);
+    Cell lookup_global(const std::string& name) const;
+    bool has_global(const std::string& name) const;
+    
+    // Heap allocation.
+    Cell allocate_string(const std::string& value);
+    std::string* get_string(Cell cell);
+    
+    Cell allocate_function(std::unique_ptr<FunctionObject> func);
+    FunctionObject* get_function(Cell cell);
+    
+    // Execution.
+    void execute(FunctionObject* func);
+    
+private:
+    void execute_instruction(const Instruction& inst);
+};
+
+} // namespace nutmeg
+
+#endif // MACHINE_HPP

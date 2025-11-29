@@ -96,6 +96,8 @@ experiment called Ginger. The key tweak is that Nutmeg directly supports
 "NutmegMachine" as a first-class native datatype. More on this later - for the
 moment just focus on getting a single machine working.
 
+
+
 ## Next Steps
 
 1. Set up SQLite3 integration
