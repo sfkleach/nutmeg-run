@@ -8,8 +8,18 @@ The command line arguments are as follows:
 nutmeg-run [OPTIONS] BUNDLE_FILE [ARGUMENTS...]
 ```
 
-Where `OPTIONS` have not been decided yet and `ARGUMENTS` are passed to the
-`main` entry point of the Nutmeg program.
+### OPTIONS
+
+**--entry-point=NAME**: This names the entry-point that will be invoked. If
+this is not supplied then only one entry-point should exist (common case) and
+execution starts there.
+
+### ARGUMENTS
+
+`ARGUMENTS` are passed to the `main` entry point of the Nutmeg program.
+
+
+### BUNDLE_FILE
 
 `BUNDLE_FILE` is a Nutmeg bundle file created by the `nutmeg-bundler`
 program, which is a SQLITE3 database file with the following schema:
