@@ -76,6 +76,21 @@ type FunctionObject struct {
 }
 ```
 
+## The Abstract Machine
+
+The abstract machine manages multiple "task-machines" that each have their own
+stacks, dictionary of globals, and heap. Each task-machine is based on a
+dual-stack architecture with tagged 64-bit "cells", where the low order bits
+indicate the run-time type. In addition there is a global dictionary that
+contains definitions for top-level bindings and a heap for objects, including
+functions.
+
+This architecture is inspired by Poplog, partially implemented in https://github.com/sfkleach/poppy,
+but has some specific tweaks that come from an earlier programming language
+experiment called Ginger. The key tweak is that Nutmeg directly supports
+"NutmegMachine" as a first-class native datatype. More on this later - for the
+moment just focus on getting a single machine working.
+
 ## Next Steps
 
 1. Set up SQLite3 integration
