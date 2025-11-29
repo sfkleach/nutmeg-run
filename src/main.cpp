@@ -24,6 +24,15 @@ CommandLineArgs parse_args(int argc, char* argv[]) {
             args.entry_point = arg.substr(14);  // Length of "--entry-point=".
             i++;
         }
+        // Check for -e NAME (short form).
+        else if (arg == "-e") {
+            if (i + 1 >= argc) {
+                fmt::print(stderr, "Error: -e option requires an argument\n");
+                std::exit(1);
+            }
+            args.entry_point = argv[i + 1];
+            i += 2;
+        }
         // Stop at first non-option argument (the bundle file).
         else if (arg[0] != '-') {
             break;
@@ -39,7 +48,7 @@ CommandLineArgs parse_args(int argc, char* argv[]) {
         fmt::print(stderr, "Error: Missing BUNDLE_FILE argument\n");
         fmt::print(stderr, "Usage: nutmeg-run [OPTIONS] BUNDLE_FILE [ARGUMENTS...]\n");
         fmt::print(stderr, "Options:\n");
-        fmt::print(stderr, "  --entry-point=NAME  Specify the entry point to invoke\n");
+        fmt::print(stderr, "  -e NAME, --entry-point=NAME  Specify the entry point to invoke\n");
         std::exit(1);
     }
     args.bundle_file = argv[i++];
