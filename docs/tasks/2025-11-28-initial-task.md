@@ -1,5 +1,10 @@
 # Initial development
 
+## The Initial Goal
+
+To load up the hello-world bundle file and execute it. The `hello-world.bundle` 
+file will be supplied. The test command will be: `nutmeg-run hello-world.bundle`.
+
 ## Background
 
 The command line arguments are as follows:
