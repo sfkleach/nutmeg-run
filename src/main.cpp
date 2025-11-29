@@ -19,12 +19,21 @@ CommandLineArgs parse_args(int argc, char* argv[]) {
     while (i < argc) {
         std::string arg = argv[i];
         
-        // Check for --entry-point=NAME.
+        // Check for --entry-point=NAME (optional form).
         if (arg.rfind("--entry-point=", 0) == 0) {
             args.entry_point = arg.substr(14);  // Length of "--entry-point=".
             i++;
         }
-        // Check for -e NAME (short form).
+        // Check for --entry-point NAME (required form).
+        else if (arg == "--entry-point") {
+            if (i + 1 >= argc) {
+                fmt::print(stderr, "Error: --entry-point option requires an argument\n");
+                std::exit(1);
+            }
+            args.entry_point = argv[i + 1];
+            i += 2;
+        }
+        // Check for -e NAME (short form, must take a value).
         else if (arg == "-e") {
             if (i + 1 >= argc) {
                 fmt::print(stderr, "Error: -e option requires an argument\n");
@@ -32,6 +41,11 @@ CommandLineArgs parse_args(int argc, char* argv[]) {
             }
             args.entry_point = argv[i + 1];
             i += 2;
+        }
+        // Check for -e=NAME (short form, may take a value).
+        else if (arg.rfind("-e=", 0) == 0) {
+            args.entry_point = arg.substr(3);  // Length of "-e=".
+            i++;
         }
         // Stop at first non-option argument (the bundle file).
         else if (arg[0] != '-') {
@@ -48,7 +62,8 @@ CommandLineArgs parse_args(int argc, char* argv[]) {
         fmt::print(stderr, "Error: Missing BUNDLE_FILE argument\n");
         fmt::print(stderr, "Usage: nutmeg-run [OPTIONS] BUNDLE_FILE [ARGUMENTS...]\n");
         fmt::print(stderr, "Options:\n");
-        fmt::print(stderr, "  -e NAME, --entry-point=NAME  Specify the entry point to invoke\n");
+        fmt::print(stderr, "  -e NAME, -e=NAME, --entry-point NAME, --entry-point=NAME\n");
+        fmt::print(stderr, "                          Specify the entry point to invoke\n");
         std::exit(1);
     }
     args.bundle_file = argv[i++];
