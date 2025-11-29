@@ -6,18 +6,29 @@ There's no universal consensus on the syntax of command-line options. This note
 documents the approach to be taken with nutmeg-run (and similar commands such as
 nutmeg-common, nutmeg-bundler etc) and the nutmeg command itself.
 
-## Decision
+
+## Terminology
+
+Our option flags fall into 3 groups: those that take no value, those that take
+a single value, and those that optionally take a single value. We give them
+these names:
+
+- zero-valued
+- maybe-valued
+- uni-valued
+
+# Decision
 
 - Subcommands (relevent to the `nutmeg` command but not `nutmeg-run`)
 - Short options
-    - `cmd -x`, when the option _may_ take no value
-    - `cmd -o VALUE`, when the option _must_ take a value
-    - `cmd -o=VALUE`, when the option _may_ take a value
-    - `cmd -xy`, compacted short options, all which _may_ take no value
+    - `cmd -x`, when the option _can_ take no value (zero/maybe valued)
+    - `cmd -o VALUE`, when the option is _required_ to take a value (uni valued)
+    - `cmd -o=VALUE`, when the option _can_ take a value (maybe/uni valued)
+    - `cmd -xy`, compacted short options, all which _may_ take no value (zero valued)
 - GNU-style long options 
-    - `cmd --long-option`, when the option _may_ take no value
-    - `cmd --long-value VALUE`, when the option _must_ take one value
-    - `cmd --long-value=VALUE`, when the option _may_ take one value
+    - `cmd --long-option`, when the option _can_ take no value (zero/maybe valued)
+    - `cmd --long-value VALUE`, when the option is _required_ to take one value (uni valued)
+    - `cmd --long-value=VALUE`, when the option _can_ take one value (maybe/uni valued)
     - `cmd --help`, will be provided (but short-codes are optional)
 - Mandatory positional arguments
     - `cmd ARG1 ARG2 ARG3`, are positional arguments that must come before 
