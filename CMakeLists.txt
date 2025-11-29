@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.15)
-project(MyApp LANGUAGES CXX)
+project(nutmeg-run LANGUAGES CXX)
 
 # Conan integration (Conan 2)
 find_package(fmt REQUIRED)
@@ -16,7 +16,10 @@ target_link_libraries(${PROJECT_NAME} PRIVATE fmt::fmt SQLite::SQLite3 nlohmann_
 # Enable testing
 enable_testing()
 file(GLOB TEST_SOURCES "${CMAKE_SOURCE_DIR}/tests/*.cpp")
-add_executable(tests ${TEST_SOURCES})
+# Include source files except main.cpp for testing (defensive check to avoid linking main() twice).
+file(GLOB TEST_LIB_SOURCES "${CMAKE_SOURCE_DIR}/src/*.cpp")
+list(FILTER TEST_LIB_SOURCES EXCLUDE REGEX ".*main\\.cpp$")
+add_executable(tests ${TEST_SOURCES} ${TEST_LIB_SOURCES})
 target_compile_features(tests PRIVATE cxx_std_17)
 target_link_libraries(tests PRIVATE fmt::fmt SQLite::SQLite3 nlohmann_json::nlohmann_json Catch2::Catch2WithMain)
 add_test(NAME AllTests COMMAND tests)
