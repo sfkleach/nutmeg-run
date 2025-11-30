@@ -11,3 +11,9 @@ The bottom three bits have this interpretation:
 | 101  | Reserved |
 | 111  | Special literal    values |
 
+N.B. Integers (and floating point) use two-tags and incorporate bit 2, which is
+nominally part of the tag, as their lowest bit. So even numbers use tag 000 and
+odd numbers use tag 001. 
+
+So although the payload is only 61-bits, the integer-values that are represented
+are a full 62-bits because of this use of bit-2.

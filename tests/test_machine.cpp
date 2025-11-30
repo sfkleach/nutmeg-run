@@ -8,12 +8,12 @@ TEST_CASE("Machine can push and pop values", "[machine]") {
     Machine machine;
     
     // Test integer values.
-    machine.push(make_small_int(42));
-    machine.push(make_small_int(100));
+    machine.push(make_int(42));
+    machine.push(make_int(100));
     
     REQUIRE(machine.stack_size() == 2);
-    REQUIRE(get_small_int(machine.pop()) == 100);
-    REQUIRE(get_small_int(machine.pop()) == 42);
+    REQUIRE(as_int(machine.pop()) == 100);
+    REQUIRE(as_int(machine.pop()) == 42);
     REQUIRE(machine.empty());
 }
 
@@ -23,8 +23,8 @@ TEST_CASE("Machine can allocate strings", "[machine]") {
     Cell str1 = machine.allocate_string("hello");
     Cell str2 = machine.allocate_string("world");
     
-    REQUIRE(is_string(str1));
-    REQUIRE(is_string(str2));
+    REQUIRE(is_ptr(str1));
+    REQUIRE(is_ptr(str2));
     REQUIRE(*machine.get_string(str1) == "hello");
     REQUIRE(*machine.get_string(str2) == "world");
 }
@@ -32,15 +32,15 @@ TEST_CASE("Machine can allocate strings", "[machine]") {
 TEST_CASE("Machine can define and lookup globals", "[machine]") {
     Machine machine;
     
-    machine.define_global("x", make_small_int(42));
-    machine.define_global("y", make_small_int(100));
+    machine.define_global("x", make_int(42));
+    machine.define_global("y", make_int(100));
     
     REQUIRE(machine.has_global("x"));
     REQUIRE(machine.has_global("y"));
     REQUIRE(!machine.has_global("z"));
     
-    REQUIRE(get_small_int(machine.lookup_global("x")) == 42);
-    REQUIRE(get_small_int(machine.lookup_global("y")) == 100);
+    REQUIRE(as_int(machine.lookup_global("x")) == 42);
+    REQUIRE(as_int(machine.lookup_global("y")) == 100);
 }
 
 TEST_CASE("Machine can execute simple function", "[machine]") {
@@ -66,6 +66,6 @@ TEST_CASE("Machine can execute simple function", "[machine]") {
     
     // Should have 2 values on stack.
     REQUIRE(machine.stack_size() == 2);
-    REQUIRE(get_small_int(machine.pop()) == 100);
-    REQUIRE(get_small_int(machine.pop()) == 42);
+    REQUIRE(as_int(machine.pop()) == 100);
+    REQUIRE(as_int(machine.pop()) == 42);
 }

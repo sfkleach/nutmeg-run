@@ -77,28 +77,28 @@ Cell Machine::allocate_string(const std::string& value) {
     str->value = value;
     HeapString* ptr = str.get();
     string_heap_.push_back(std::move(str));
-    return make_string(ptr);
+    return make_ptr(ptr);
 }
 
 std::string* Machine::get_string(Cell cell) {
-    if (!is_string(cell)) {
-        throw std::runtime_error("Cell is not a string");
+    if (!is_ptr(cell)) {
+        throw std::runtime_error("Cell is not a pointer");
     }
-    HeapString* heap_str = static_cast<HeapString*>(get_string_ptr(cell));
+    HeapString* heap_str = static_cast<HeapString*>(as_ptr(cell));
     return &heap_str->value;
 }
 
 Cell Machine::allocate_function(std::unique_ptr<FunctionObject> func) {
     FunctionObject* ptr = func.get();
     function_heap_.push_back(std::move(func));
-    return make_function(ptr);
+    return make_ptr(ptr);
 }
 
 FunctionObject* Machine::get_function(Cell cell) {
-    if (!is_function(cell)) {
-        throw std::runtime_error("Cell is not a function");
+    if (!is_ptr(cell)) {
+        throw std::runtime_error("Cell is not a pointer");
     }
-    return static_cast<FunctionObject*>(get_function_ptr(cell));
+    return static_cast<FunctionObject*>(as_ptr(cell));
 }
 
 // Execution.
@@ -129,7 +129,7 @@ void Machine::execute_instruction(const Instruction& inst) {
         if (!inst.index) {
             throw std::runtime_error("PushInt missing index field");
         }
-        push(make_small_int(*inst.index));
+        push(make_int(*inst.index));
     }
     else if (inst.type == "PushString") {
         if (!inst.value) {

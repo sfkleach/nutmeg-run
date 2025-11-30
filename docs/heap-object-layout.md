@@ -3,7 +3,7 @@
 ## General Principles
 
 - All Nutmeg pointers are aligned to 64-bit word boundaries.
-- In a cell, they are offset by one due to the tagging scheme.
+- In a cell, pointers are tagged with 001, which means they must be detagged before use.
 - Heap objects are contiguous strips of memory that are aligned
   on 64-bit word boundaries.
 - Heap objects have a single field dedicated to storing the 
@@ -26,7 +26,7 @@ The following types of heap objects are supported:
 
 Key-objects are record-like datastructures that are laid out as follows:
 
-| Offset | Description | Tagged? |
+| Position | Description | Tagged? |
 |--------|-------------|---------|
 | 0 | Datakey | Tagged |
 | 1 | Flavour | Raw, 8 bits |
@@ -40,7 +40,7 @@ Binary arrays.
 The `datakey` of any key object is the unique `keykey` object, which is a 
 unique key with the layout:
 
-| Offset | Description | Value |
+| Position | Description | Value |
 |--------|-------------|---------|
 | 0 | Datakey (self-pointer) | Tagged |
 | 1 | Flavour | 0 |
@@ -52,7 +52,7 @@ unique key with the layout:
 Each record object of a given type has a datakey followed by W raw words and C
 tagged cells.
 
-| Offset | Description | Tagged? |
+| Position | Description | Tagged? |
 |--------|-------------|---------|
 | 0 | Datakey | Tagged |
 | 1 | Raw #1 | Raw, 64-bits |
@@ -68,7 +68,7 @@ tagged cells.
 Vector objects are like record-objects but have a leading length field L and
 following the fixed fields a variable number L of tagged cells.
 
-| Offset | Description | Tagged? |
+| Position | Description | Tagged? |
 |--------|-------------|---------|
 | -1 | Length | Tagged, guaranteed x00 tag |
 | 0 | Datakey | Tagged |
@@ -78,9 +78,9 @@ following the fixed fields a variable number L of tagged cells.
 | W+1 | Cell #1 | Tagged |
 | .. | ... | Tagged |
 | W+C | Cell #C | Tagged |
-| W+C+1 | Offset 0 | Tagged |
+| W+C+1 | Position 0 | Tagged |
 | .. | ... | Tagged |
-| W+C+L | Offset L-1 | Tagged |
+| W+C+L | Position L-1 | Tagged |
 
 
 ## Binarray-objects
@@ -88,7 +88,7 @@ following the fixed fields a variable number L of tagged cells.
 Binary array objects are like record-objects but have a leading length field L and
 following the fixed fields a variable number L of raw words.
 
-| Offset | Description | Tagged? |
+| Position | Description | Tagged? |
 |--------|-------------|---------|
 | -1 | Length | Tagged, guaranteed x00 tag |
 | 0 | Datakey | Tagged |
@@ -98,9 +98,9 @@ following the fixed fields a variable number L of raw words.
 | W+1 | Cell #1 | Tagged |
 | .. | ... | Tagged |
 | W+C | Cell #C | Tagged |
-| W+C+1 | Offset 0 | Raw, BitWidth |
+| W+C+1 | Position 0 | Raw, BitWidth |
 | .. | ... | Raw, BitWidth |
-| W+C+L | Offset L-1 | Raw, BitWidth |
+| W+C+L | Position L-1 | Raw, BitWidth |
 
 N.B. This is the object-type used to represented UTF-8 strings with a
 bit-width of 8.
@@ -121,7 +121,7 @@ Following the datakey are two numerical values: the number of locals and the
 number of arguments accepted by the function.
 
 
-| Offset | Description | Tagged? |
+| Position | Description | Tagged? |
 |--------|-------------|---------|
 | -2  | Length N, number of instruction words | Tagged, guaranteed x00 tag |
 | -1  | Length L, of the T-block | Tagged, guaranteed x00 tag |
