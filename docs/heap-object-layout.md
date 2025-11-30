@@ -13,7 +13,7 @@
 
 The following types of heap objects are supported:
 
-- Keys, which are values representing the type of an object.
+- Datakeys, which are values representing the type of an object.
 - Records, which are a fixed set of 64-bit fields, some of
   which are tagged cells and others are raw. The raw fields may be
   carved up into sub-fields.
@@ -22,13 +22,13 @@ The following types of heap objects are supported:
 - Procedures, which are a complex structure containing abstract machine
   instructions.
 
-## Key-objects
+## Datakey-objects
 
-Key-objects are record-like datastructures that are laid out as follows:
+Datakey-objects are record-like datastructures that are laid out as follows:
 
 | Position | Description | Tagged? |
 |--------|-------------|---------|
-| 0 | Datakey | Tagged |
+| 0 | Datakey, always the DatakeyDatakey | Tagged |
 | 1 | Flavour | Raw, 8 bits |
 | 2 | NumWords | Raw, 16 bits |
 | 3 | NumCells | Raw, 16 bits |
@@ -37,7 +37,7 @@ Key-objects are record-like datastructures that are laid out as follows:
 N.B. The BitWidth is used to describe the width of each array-entry when using
 Binary arrays.
 
-The `datakey` of any key object is the unique `keykey` object, which is a 
+The `datakey` of any key object is the unique `DatakeyDatakey` object, which is a 
 unique key with the layout:
 
 | Position | Description | Value |
@@ -106,9 +106,9 @@ N.B. This is the object-type used to represented UTF-8 strings with a
 bit-width of 8.
 
 
-## Procedure-objects
+## Function-objects
 
-Procedure objects are relatively complex, custom object layouts. The
+Function-objects are relatively complex, custom object layouts. The
 instructions begin immediately after the datakey and interleave instructions and
 data, including tagged cells. The location of tagged-pointer cells is recorded
 in packed array of 32 bit unsigned values at the end of the instructions. This
