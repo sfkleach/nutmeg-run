@@ -2,11 +2,13 @@
 #define BUNDLE_READER_HPP
 
 #include "function_object.hpp"
+#include "instruction.hpp"
 #include <sqlite3.h>
 #include <string>
 #include <vector>
 #include <memory>
 #include <stdexcept>
+#include <unordered_map>
 
 namespace nutmeg {
 
@@ -48,8 +50,8 @@ public:
     // Get dependencies for a given IdName.
     std::vector<std::string> get_dependencies(const std::string& idname);
 
-    // Parse the JSON value field into a FunctionObject.
-    FunctionObject parse_function_object(const std::string& json);
+    // Parse the JSON value field into a FunctionObject, compiling to threaded code.
+    FunctionObject parse_function_object(const std::string& json, const std::unordered_map<Opcode, void*>& opcode_map);
 };
 
 } // namespace nutmeg

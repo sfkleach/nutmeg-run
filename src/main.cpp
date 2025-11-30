@@ -10,13 +10,11 @@ struct CommandLineArgs {
     std::optional<std::string> entry_point;
     std::string bundle_file;
     std::vector<std::string> program_args;
-    bool use_threaded;  // Use threaded interpreter.
 };
 
 // Parse command-line arguments according to: nutmeg-run [OPTIONS] BUNDLE_FILE [ARGUMENTS...].
 CommandLineArgs parse_args(int argc, char* argv[]) {
     CommandLineArgs args;
-    args.use_threaded = false;
     int i = 1;
 
     // Parse options.
@@ -51,11 +49,6 @@ CommandLineArgs parse_args(int argc, char* argv[]) {
             args.entry_point = arg.substr(3);  // Length of "-e=".
             i++;
         }
-        // Check for --threaded flag.
-        else if (arg == "--threaded") {
-            args.use_threaded = true;
-            i++;
-        }
         // Stop at first non-option argument (the bundle file).
         else if (arg[0] != '-') {
             break;
@@ -73,7 +66,6 @@ CommandLineArgs parse_args(int argc, char* argv[]) {
         fmt::print(stderr, "Options:\n");
         fmt::print(stderr, "  -e NAME, -e=NAME, --entry-point NAME, --entry-point=NAME\n");
         fmt::print(stderr, "                          Specify the entry point to invoke\n");
-        fmt::print(stderr, "  --threaded              Use threaded interpreter (experimental)\n");
         std::exit(1);
     }
     args.bundle_file = argv[i++];
@@ -114,20 +106,17 @@ int main(int argc, char* argv[]) {
             entry_point_name = entry_points[0];
         }
         
+        // Create the machine (initializes threaded interpreter).
+        nutmeg::Machine machine;
+        
         // Load the binding for the entry point.
         nutmeg::Binding binding = reader.get_binding(entry_point_name);
         
-        // Parse the function object.
-        nutmeg::FunctionObject func = reader.parse_function_object(binding.value);
+        // Parse the function object, compiling to threaded code.
+        nutmeg::FunctionObject func = reader.parse_function_object(binding.value, machine.get_opcode_map());
         
-        // Create the machine and execute.
-        nutmeg::Machine machine;
-        if (args.use_threaded) {
-            machine.init_threaded();
-            machine.execute_threaded(&func);
-        } else {
-            machine.execute(&func);
-        }
+        // Execute.
+        machine.execute(&func);
         
         return 0;
         

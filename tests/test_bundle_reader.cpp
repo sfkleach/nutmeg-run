@@ -1,10 +1,12 @@
 #include <catch2/catch_test_macros.hpp>
 #include "../src/bundle_reader.hpp"
+#include "../src/machine.hpp"
 
 using namespace nutmeg;
 
 TEST_CASE("BundleReader can parse function object JSON", "[bundle_reader]") {
     BundleReader reader(":memory:");  // This will fail to open, but we just want to test parsing.
+    Machine machine;  // Need machine to get opcode map.
     
     std::string json = R"({
         "nlocals": 2,
@@ -26,19 +28,11 @@ TEST_CASE("BundleReader can parse function object JSON", "[bundle_reader]") {
         ]
     })";
     
-    FunctionObject func = reader.parse_function_object(json);
+    FunctionObject func = reader.parse_function_object(json, machine.get_opcode_map());
     
     REQUIRE(func.nlocals == 2);
     REQUIRE(func.nparams == 1);
-    REQUIRE(func.instructions.size() == 3);
-    
-    REQUIRE(func.instructions[0].type == "PushInt");
-    REQUIRE(func.instructions[0].index == 42);
-    
-    REQUIRE(func.instructions[1].type == "PushString");
-    REQUIRE(func.instructions[1].value == "hello");
-    
-    REQUIRE(func.instructions[2].type == "SyscallCounted");
-    REQUIRE(func.instructions[2].name == "print");
-    REQUIRE(func.instructions[2].nargs == 1);
+    // Compiled code should be: PUSH_INT 42 PUSH_STRING ptr SYSCALL_COUNTED name nargs HALT.
+    // That's 1+1 + 1+1 + 1+2 + 1 = 8 instruction words.
+    REQUIRE(func.code.size() == 8);
 }

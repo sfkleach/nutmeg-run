@@ -108,7 +108,7 @@ std::vector<std::string> BundleReader::get_dependencies(const std::string& idnam
     return dependencies;
 }
 
-FunctionObject BundleReader::parse_function_object(const std::string& json_str) {
+FunctionObject BundleReader::parse_function_object(const std::string& json_str, const std::unordered_map<Opcode, void*>& opcode_map) {
     try {
         json j = json::parse(json_str);
 
@@ -116,10 +116,11 @@ FunctionObject BundleReader::parse_function_object(const std::string& json_str) 
         func.nlocals = j.at("nlocals").get<int>();
         func.nparams = j.at("nparams").get<int>();
 
+        // Compile instructions to threaded code.
         for (const auto& inst_json : j.at("instructions")) {
             Instruction inst;
             inst.type = inst_json.at("type").get<std::string>();
-            inst.opcode = string_to_opcode(inst.type);  // Map to opcode.
+            inst.opcode = string_to_opcode(inst.type);
 
             // Optional fields.
             if (inst_json.contains("index")) {
@@ -135,8 +136,58 @@ FunctionObject BundleReader::parse_function_object(const std::string& json_str) 
                 inst.nargs = inst_json.at("nargs").get<int>();
             }
 
-            func.instructions.push_back(inst);
+            // Compile to threaded code: emit label address followed by operands.
+            InstructionWord label_word;
+            label_word.label_addr = opcode_map.at(inst.opcode);
+            func.code.push_back(label_word);
+            
+            // Add immediate operands based on instruction type.
+            switch (inst.opcode) {
+            case Opcode::PUSH_INT:
+            case Opcode::POP_LOCAL:
+            case Opcode::PUSH_LOCAL: {
+                InstructionWord operand;
+                operand.i64 = inst.index.value_or(0);
+                func.code.push_back(operand);
+                break;
+            }
+            
+            case Opcode::PUSH_STRING:
+            case Opcode::PUSH_GLOBAL: {
+                InstructionWord operand;
+                // Allocate string on heap and store pointer.
+                // Note: We need to keep the strings alive, so store them in the function.
+                static thread_local std::vector<std::string> string_storage;
+                string_storage.push_back(inst.value.value());
+                operand.str_ptr = &string_storage.back();
+                func.code.push_back(operand);
+                break;
+            }
+            
+            case Opcode::SYSCALL_COUNTED:
+            case Opcode::CALL_GLOBAL_COUNTED: {
+                InstructionWord name_word, nargs_word;
+                static thread_local std::vector<std::string> string_storage;
+                string_storage.push_back(inst.name.value());
+                name_word.str_ptr = &string_storage.back();
+                nargs_word.i64 = inst.nargs.value_or(0);
+                func.code.push_back(name_word);
+                func.code.push_back(nargs_word);
+                break;
+            }
+            
+            case Opcode::STACK_LENGTH:
+            case Opcode::RETURN:
+            case Opcode::HALT:
+                // No operands.
+                break;
+            }
         }
+        
+        // Add HALT at the end.
+        InstructionWord halt_word;
+        halt_word.label_addr = opcode_map.at(Opcode::HALT);
+        func.code.push_back(halt_word);
 
         return func;
     } catch (const json::exception& e) {

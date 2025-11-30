@@ -7,27 +7,24 @@ using namespace nutmeg;
 
 TEST_CASE("Threaded interpreter can execute simple function", "[threaded]") {
     Machine machine;
-    machine.init_threaded();  // Initialize threaded mode.
+    const auto& opcode_map = machine.get_opcode_map();
     
     // Create a simple function: push 42, push 100.
     auto func = std::make_unique<FunctionObject>();
     func->nlocals = 0;
     func->nparams = 0;
     
-    Instruction inst1;
-    inst1.type = "PushInt";
-    inst1.opcode = Opcode::PUSH_INT;
-    inst1.index = 42;
-    func->instructions.push_back(inst1);
-    
-    Instruction inst2;
-    inst2.type = "PushInt";
-    inst2.opcode = Opcode::PUSH_INT;
-    inst2.index = 100;
-    func->instructions.push_back(inst2);
+    // Compile to threaded code: PUSH_INT 42, PUSH_INT 100, HALT.
+    InstructionWord w1, w2, w3, w4, w5;
+    w1.label_addr = opcode_map.at(Opcode::PUSH_INT);
+    w2.i64 = 42;
+    w3.label_addr = opcode_map.at(Opcode::PUSH_INT);
+    w4.i64 = 100;
+    w5.label_addr = opcode_map.at(Opcode::HALT);
+    func->code = {w1, w2, w3, w4, w5};
     
     FunctionObject* func_ptr = func.get();
-    machine.execute_threaded(func_ptr);
+    machine.execute(func_ptr);
     
     // Should have 2 values on stack.
     REQUIRE(machine.stack_size() == 2);
@@ -37,20 +34,22 @@ TEST_CASE("Threaded interpreter can execute simple function", "[threaded]") {
 
 TEST_CASE("Threaded interpreter can handle strings", "[threaded]") {
     Machine machine;
-    machine.init_threaded();
+    const auto& opcode_map = machine.get_opcode_map();
     
     auto func = std::make_unique<FunctionObject>();
     func->nlocals = 0;
     func->nparams = 0;
     
-    Instruction inst;
-    inst.type = "PushString";
-    inst.opcode = Opcode::PUSH_STRING;
-    inst.value = "hello";
-    func->instructions.push_back(inst);
+    // Compile to threaded code: PUSH_STRING "hello", HALT.
+    static std::string test_str = "hello";
+    InstructionWord w1, w2, w3;
+    w1.label_addr = opcode_map.at(Opcode::PUSH_STRING);
+    w2.str_ptr = &test_str;
+    w3.label_addr = opcode_map.at(Opcode::HALT);
+    func->code = {w1, w2, w3};
     
     FunctionObject* func_ptr = func.get();
-    machine.execute_threaded(func_ptr);
+    machine.execute(func_ptr);
     
     REQUIRE(machine.stack_size() == 1);
     Cell str = machine.pop();
