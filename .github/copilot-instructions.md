@@ -22,7 +22,13 @@ The goal is to build robust, well-designed software, not to avoid technical disa
   including the use of capitalization and periods.
 - Where defensive checks are added, include a comment explaining why they are
   appropriate (not necessary, since defensive checks are not necessary).
+
+## Programming Style Guidelines
+
 - I prefer text files to use new-line as a terminator rather than a separator
   i.e. newlines at the end of non-empty files.
 - And lines should not have trailing whitespace.
+- We use 120 as the maximum line-length and not 80 characters. The detailed guideline
+  is that the length first-to-last non-whitespace character should be 80 characters
+  and that an additional 40 characters of indentation is allowed.
 
