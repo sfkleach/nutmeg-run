@@ -4,9 +4,8 @@
 
 using namespace nutmeg;
 
-TEST_CASE("BundleReader can parse function object JSON", "[bundle_reader]") {
-    BundleReader reader(":memory:");  // This will fail to open, but we just want to test parsing.
-    Machine machine;  // Need machine to get opcode map.
+TEST_CASE("Machine can parse function object JSON", "[bundle_reader]") {
+    Machine machine;  // Machine now has parse_function_object.
     
     std::string json = R"({
         "nlocals": 2,
@@ -28,11 +27,11 @@ TEST_CASE("BundleReader can parse function object JSON", "[bundle_reader]") {
         ]
     })";
     
-    FunctionObject func = reader.parse_function_object(json, machine.get_opcode_map());
+    FunctionObject func = machine.parse_function_object(json);
     
     REQUIRE(func.nlocals == 2);
     REQUIRE(func.nparams == 1);
-    // Compiled code should be: PUSH_INT 42 PUSH_STRING ptr SYSCALL_COUNTED name nargs HALT.
+    // Compiled code should be: PUSH_INT 42 PUSH_STRING cell SYSCALL_COUNTED name nargs HALT.
     // That's 1+1 + 1+1 + 1+2 + 1 = 8 instruction words.
     REQUIRE(func.code.size() == 8);
 }

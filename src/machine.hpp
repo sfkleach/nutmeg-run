@@ -63,6 +63,9 @@ public:
     Cell allocate_function(const std::vector<InstructionWord>& code, int nlocals, int nparams);
     HeapCell* get_function_ptr(Cell cell);
     
+    // Parse JSON function object and compile to threaded code.
+    FunctionObject parse_function_object(const std::string& json_str);
+    
     // Get the heap for external use (e.g., initializing globals).
     Heap& get_heap() { return heap_; }
     

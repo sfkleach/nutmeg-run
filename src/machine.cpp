@@ -1,4 +1,6 @@
 #include "machine.hpp"
+#include "instruction.hpp"
+#include <nlohmann/json.hpp>
 #include <stdexcept>
 #include <fmt/core.h>
 
@@ -166,8 +168,9 @@ void Machine::execute_syscall(const std::string& name, int nargs) {
         if (is_int(value)) {
             fmt::print("{}\n", as_int(value));
         } else if (is_ptr(value)) {
-            // Assume it's a string pointer (defensive check).
-            const char* str = get_string(value);
+            // Get string data from heap.
+            HeapCell* obj_ptr = static_cast<HeapCell*>(as_ptr(value));
+            const char* str = heap_.get_string_data(obj_ptr);
             fmt::print("{}\n", str);
         } else if (is_bool(value)) {
             fmt::print("{}\n", as_bool(value) ? "true" : "false");
@@ -179,6 +182,101 @@ void Machine::execute_syscall(const std::string& name, int nargs) {
     }
     else {
         throw std::runtime_error(fmt::format("Unknown syscall: {}", name));
+    }
+}
+
+FunctionObject Machine::parse_function_object(const std::string& json_str) {
+    try {
+        nlohmann::json j = nlohmann::json::parse(json_str);
+
+        FunctionObject func;
+        func.nlocals = j.at("nlocals").get<int>();
+        func.nparams = j.at("nparams").get<int>();
+
+        // Compile instructions to threaded code.
+        for (const auto& inst_json : j.at("instructions")) {
+            Instruction inst;
+            inst.type = inst_json.at("type").get<std::string>();
+            inst.opcode = string_to_opcode(inst.type);
+
+            // Optional fields.
+            if (inst_json.contains("index")) {
+                inst.index = inst_json.at("index").get<int>();
+            }
+            if (inst_json.contains("value")) {
+                inst.value = inst_json.at("value").get<std::string>();
+            }
+            if (inst_json.contains("name")) {
+                inst.name = inst_json.at("name").get<std::string>();
+            }
+            if (inst_json.contains("nargs")) {
+                inst.nargs = inst_json.at("nargs").get<int>();
+            }
+
+            // Compile to threaded code: emit label address followed by operands.
+            InstructionWord label_word;
+            label_word.label_addr = opcode_map_.at(inst.opcode);
+            func.code.push_back(label_word);
+            
+            // Add immediate operands based on instruction type.
+            switch (inst.opcode) {
+            case Opcode::PUSH_INT:
+            case Opcode::POP_LOCAL:
+            case Opcode::PUSH_LOCAL: {
+                InstructionWord operand;
+                operand.i64 = inst.index.value_or(0);
+                func.code.push_back(operand);
+                break;
+            }
+            
+            case Opcode::PUSH_STRING: {
+                // Allocate string in heap and store the Cell pointer.
+                std::string str_value = inst.value.value();
+                Cell str_cell = allocate_string(str_value);
+                InstructionWord operand;
+                operand.u64 = str_cell;
+                func.code.push_back(operand);
+                break;
+            }
+            
+            case Opcode::PUSH_GLOBAL: {
+                // Store pointer to global name string (kept in static storage).
+                InstructionWord operand;
+                static thread_local std::vector<std::string> string_storage;
+                string_storage.push_back(inst.value.value());
+                operand.str_ptr = &string_storage.back();
+                func.code.push_back(operand);
+                break;
+            }
+            
+            case Opcode::SYSCALL_COUNTED:
+            case Opcode::CALL_GLOBAL_COUNTED: {
+                InstructionWord name_word, nargs_word;
+                static thread_local std::vector<std::string> string_storage;
+                string_storage.push_back(inst.name.value());
+                name_word.str_ptr = &string_storage.back();
+                nargs_word.i64 = inst.nargs.value_or(0);
+                func.code.push_back(name_word);
+                func.code.push_back(nargs_word);
+                break;
+            }
+            
+            case Opcode::STACK_LENGTH:
+            case Opcode::RETURN:
+            case Opcode::HALT:
+                // No operands.
+                break;
+            }
+        }
+        
+        // Add HALT at the end.
+        InstructionWord halt_word;
+        halt_word.label_addr = opcode_map_.at(Opcode::HALT);
+        func.code.push_back(halt_word);
+
+        return func;
+    } catch (const nlohmann::json::exception& e) {
+        throw std::runtime_error(fmt::format("JSON parsing error: {}", e.what()));
     }
 }
 
@@ -232,8 +330,8 @@ void Machine::threaded_impl(std::vector<InstructionWord>* code, bool init_mode) 
     }
     
     L_PUSH_STRING: {
-        std::string* str = (pc++)->str_ptr;
-        push(allocate_string(*str));
+        Cell str_cell = (pc++)->u64;
+        push(str_cell);
         goto *(pc++)->label_addr;
     }
     

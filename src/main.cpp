@@ -128,7 +128,7 @@ int main(int argc, char* argv[]) {
             nutmeg::Binding binding = reader.get_binding(idname);
             
             // Parse and register the function in globals.
-            nutmeg::FunctionObject func = reader.parse_function_object(binding.value, machine.get_opcode_map());
+            nutmeg::FunctionObject func = machine.parse_function_object(binding.value);
             nutmeg::Cell func_cell = machine.allocate_function(func.code, func.nlocals, func.nparams);
             machine.define_global(idname, func_cell);
             

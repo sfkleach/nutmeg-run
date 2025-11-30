@@ -41,11 +41,11 @@ TEST_CASE("Threaded interpreter can handle strings", "[threaded]") {
     func.nlocals = 0;
     func.nparams = 0;
     
-    // Compile to threaded code: PUSH_STRING "hello", HALT.
-    static std::string test_str = "hello";
+    // Pre-allocate string in heap and compile to threaded code: PUSH_STRING cell, HALT.
+    Cell str_cell = machine.allocate_string("hello");
     InstructionWord w1, w2, w3;
     w1.label_addr = opcode_map.at(Opcode::PUSH_STRING);
-    w2.str_ptr = &test_str;
+    w2.u64 = str_cell;
     w3.label_addr = opcode_map.at(Opcode::HALT);
     func.code = {w1, w2, w3};
     
@@ -56,5 +56,6 @@ TEST_CASE("Threaded interpreter can handle strings", "[threaded]") {
     REQUIRE(machine.stack_size() == 1);
     Cell str = machine.pop();
     REQUIRE(is_ptr(str));
-    REQUIRE(std::string(machine.get_string(str)) == "hello");
+    HeapCell* str_ptr = static_cast<HeapCell*>(as_ptr(str));
+    REQUIRE(std::string(machine.get_heap().get_string_data(str_ptr)) == "hello");
 }
