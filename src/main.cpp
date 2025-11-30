@@ -3,6 +3,8 @@
 #include <vector>
 #include <optional>
 #include <cstring>
+#include "bundle_reader.hpp"
+#include "machine.hpp"
 
 struct CommandLineArgs {
     std::optional<std::string> entry_point;
@@ -77,18 +79,47 @@ CommandLineArgs parse_args(int argc, char* argv[]) {
 }
 
 int main(int argc, char* argv[]) {
-    CommandLineArgs args = parse_args(argc, argv);
-    
-    fmt::print("Bundle file: {}\n", args.bundle_file);
-    if (args.entry_point) {
-        fmt::print("Entry point: {}\n", *args.entry_point);
-    } else {
-        fmt::print("Entry point: (default)\n");
+    try {
+        CommandLineArgs args = parse_args(argc, argv);
+        
+        // Open the bundle file.
+        nutmeg::BundleReader reader(args.bundle_file);
+        
+        // Determine which entry point to use.
+        std::string entry_point_name;
+        if (args.entry_point) {
+            entry_point_name = *args.entry_point;
+        } else {
+            // No entry point specified - get all and ensure there's exactly one.
+            auto entry_points = reader.get_entry_points();
+            if (entry_points.empty()) {
+                fmt::print(stderr, "Error: No entry points found in bundle\n");
+                return 1;
+            }
+            if (entry_points.size() > 1) {
+                fmt::print(stderr, "Error: Multiple entry points found, please specify one with --entry-point:\n");
+                for (const auto& ep : entry_points) {
+                    fmt::print(stderr, "  {}\n", ep);
+                }
+                return 1;
+            }
+            entry_point_name = entry_points[0];
+        }
+        
+        // Load the binding for the entry point.
+        nutmeg::Binding binding = reader.get_binding(entry_point_name);
+        
+        // Parse the function object.
+        nutmeg::FunctionObject func = reader.parse_function_object(binding.value);
+        
+        // Create the machine and execute.
+        nutmeg::Machine machine;
+        machine.execute(&func);
+        
+        return 0;
+        
+    } catch (const std::exception& e) {
+        fmt::print(stderr, "Error: {}\n", e.what());
+        return 1;
     }
-    fmt::print("Program arguments: {}\n", args.program_args.size());
-    for (const auto& arg : args.program_args) {
-        fmt::print("  {}\n", arg);
-    }
-    
-    return 0;
 }

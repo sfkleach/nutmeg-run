@@ -30,27 +30,27 @@ execution starts there.
 program, which is a SQLITE3 database file with the following schema:
 
 ```sql
-CREATE TABLE IF NOT EXISTS "EntryPoints" (
-  "IdName"	TEXT,
-  PRIMARY KEY("IdName")
+CREATE TABLE IF NOT EXISTS "entry_points" (
+  "id_name"	TEXT,
+  PRIMARY KEY("id_name")
 );
-CREATE TABLE IF NOT EXISTS "DependsOn" (
-  "IdName"	TEXT NOT NULL,
-  "Needs"	TEXT NOT NULL,
-  PRIMARY KEY("IdName","Needs")
+CREATE TABLE IF NOT EXISTS "depends_ons" (
+  "id_name"	TEXT NOT NULL,
+  "needs"	TEXT NOT NULL,
+  PRIMARY KEY("id_name","needs")
 );
-CREATE TABLE IF NOT EXISTS "Bindings" (
-  "IdName"	TEXT,
-  "Lazy"  BOOLEAN,
-  "Value"	TEXT,
-  "FileName"	TEXT,
-  PRIMARY KEY("IdName")
+CREATE TABLE IF NOT EXISTS "bindings" (
+  "id_name"	TEXT,
+  "lazy"  BOOLEAN,
+  "value"	TEXT,
+  "file_name"	TEXT,
+  PRIMARY KEY("id_name")
 );
-CREATE TABLE IF NOT EXISTS "SourceFiles" ( "FileName" TEXT NOT NULL, "Contents" TEXT NOT NULL, PRIMARY KEY("FileName") );
-CREATE TABLE IF NOT EXISTS "Annotations" ( "IdName" TEXT, "AnnotationKey" TEXT NOT NULL, "AnnotationValue" TEXT NOT NULL, PRIMARY KEY("IdName", "AnnotationKey") );
+CREATE TABLE IF NOT EXISTS "source_files" ( "file_name" TEXT NOT NULL, "contents" TEXT NOT NULL, PRIMARY KEY("file_name") );
+CREATE TABLE IF NOT EXISTS "annotations" ( "id_name" TEXT, "annotation_key" TEXT NOT NULL, "annotation_value" TEXT NOT NULL, PRIMARY KEY("id_name", "annotation_key") );
 ```
 
-The code resides in the `Value` part of the `Bindings` table in JSON format. 
+The code resides in the `value` part of the `bindings` table in JSON format. 
 It is generated from the following Golang serialised data:
 
 ```go

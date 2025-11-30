@@ -33,9 +33,9 @@ std::vector<std::string> BundleReader::get_entry_points() {
     std::vector<std::string> entry_points;
     sqlite3_stmt* stmt = nullptr;
 
-    const char* sql = "SELECT IdName FROM EntryPoints";
+    const char* sql = "SELECT id_name FROM entry_points";
     int result = sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr);
-    check_sqlite_result(result, "Failed to prepare EntryPoints query");
+    check_sqlite_result(result, "Failed to prepare entry_points query");
 
     while ((result = sqlite3_step(stmt)) == SQLITE_ROW) {
         const unsigned char* idname = sqlite3_column_text(stmt, 0);
@@ -53,9 +53,9 @@ std::vector<std::string> BundleReader::get_entry_points() {
 Binding BundleReader::get_binding(const std::string& idname) {
     sqlite3_stmt* stmt = nullptr;
 
-    const char* sql = "SELECT IdName, Lazy, Value, FileName FROM Bindings WHERE IdName = ?";
+    const char* sql = "SELECT id_name, lazy, value, file_name FROM bindings WHERE id_name = ?";
     int result = sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr);
-    check_sqlite_result(result, "Failed to prepare Bindings query");
+    check_sqlite_result(result, "Failed to prepare bindings query");
 
     result = sqlite3_bind_text(stmt, 1, idname.c_str(), -1, SQLITE_TRANSIENT);
     check_sqlite_result(result, "Failed to bind parameter");
@@ -88,9 +88,9 @@ std::vector<std::string> BundleReader::get_dependencies(const std::string& idnam
     std::vector<std::string> dependencies;
     sqlite3_stmt* stmt = nullptr;
 
-    const char* sql = "SELECT Needs FROM DependsOn WHERE IdName = ?";
+    const char* sql = "SELECT needs FROM depends_ons WHERE id_name = ?";
     int result = sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr);
-    check_sqlite_result(result, "Failed to prepare DependsOn query");
+    check_sqlite_result(result, "Failed to prepare depends_ons query");
 
     result = sqlite3_bind_text(stmt, 1, idname.c_str(), -1, SQLITE_TRANSIENT);
     check_sqlite_result(result, "Failed to bind parameter");

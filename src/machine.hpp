@@ -69,6 +69,7 @@ public:
     
 private:
     void execute_instruction(const Instruction& inst);
+    void execute_syscall(const std::string& name, int nargs);
 };
 
 } // namespace nutmeg

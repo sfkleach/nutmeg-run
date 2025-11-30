@@ -125,20 +125,29 @@ void Machine::execute(FunctionObject* func) {
 }
 
 void Machine::execute_instruction(const Instruction& inst) {
-    if (inst.type == "PushInt") {
+    if (inst.type == "push.int" || inst.type == "PushInt") {
         if (!inst.index) {
             throw std::runtime_error("PushInt missing index field");
         }
         push(make_int(*inst.index));
     }
-    else if (inst.type == "PushString") {
+    else if (inst.type == "push.string" || inst.type == "PushString") {
         if (!inst.value) {
             throw std::runtime_error("PushString missing value field");
         }
         Cell str_cell = allocate_string(*inst.value);
         push(str_cell);
     }
-    else if (inst.type == "PopLocal") {
+    else if (inst.type == "stack.length") {
+        // Push the current operand stack size as an integer.
+        push(make_int(static_cast<int64_t>(operand_stack_.size())));
+    }
+    else if (inst.type == "return") {
+        // Return from current function - set PC to end to exit the loop.
+        pc_ = static_cast<int>(current_function_->instructions.size());
+        return;
+    }
+    else if (inst.type == "pop.local" || inst.type == "PopLocal") {
         if (!inst.index) {
             throw std::runtime_error("PopLocal missing index field");
         }
@@ -154,7 +163,7 @@ void Machine::execute_instruction(const Instruction& inst) {
         size_t offset = return_stack_.size() - current_function_->nlocals + idx;
         return_stack_[offset] = value;
     }
-    else if (inst.type == "PushLocal") {
+    else if (inst.type == "push.local" || inst.type == "PushLocal") {
         if (!inst.index) {
             throw std::runtime_error("PushLocal missing index field");
         }
@@ -165,14 +174,14 @@ void Machine::execute_instruction(const Instruction& inst) {
         size_t offset = return_stack_.size() - current_function_->nlocals + idx;
         push(return_stack_[offset]);
     }
-    else if (inst.type == "PushGlobal") {
+    else if (inst.type == "push.global" || inst.type == "PushGlobal") {
         if (!inst.value) {
             throw std::runtime_error("PushGlobal missing value field");
         }
         Cell global_value = lookup_global(*inst.value);
         push(global_value);
     }
-    else if (inst.type == "CallGlobalCounted") {
+    else if (inst.type == "call.global.counted" || inst.type == "CallGlobalCounted") {
         if (!inst.name || !inst.nargs) {
             throw std::runtime_error("CallGlobalCounted missing name or nargs field");
         }
@@ -184,15 +193,42 @@ void Machine::execute_instruction(const Instruction& inst) {
         // In a real implementation, this would need proper call stack management (defensive check).
         execute(func);
     }
-    else if (inst.type == "SyscallCounted") {
+    else if (inst.type == "syscall.counted" || inst.type == "SyscallCounted") {
         if (!inst.name || !inst.nargs) {
             throw std::runtime_error("SyscallCounted missing name or nargs field");
         }
-        // Placeholder for syscall implementation.
-        throw std::runtime_error(fmt::format("Syscall not implemented: {}", *inst.name));
+        execute_syscall(*inst.name, *inst.nargs);
     }
     else {
         throw std::runtime_error(fmt::format("Unknown instruction: {}", inst.type));
+    }
+}
+
+void Machine::execute_syscall(const std::string& name, int nargs) {
+    if (name == "println") {
+        // Pop the value to print from the stack.
+        if (operand_stack_.empty()) {
+            throw std::runtime_error("println: stack underflow");
+        }
+        Cell value = pop();
+        
+        // Print based on type.
+        if (is_int(value)) {
+            fmt::print("{}\n", as_int(value));
+        } else if (is_ptr(value)) {
+            // Assume it's a string pointer (defensive check).
+            std::string* str = get_string(value);
+            fmt::print("{}\n", *str);
+        } else if (is_bool(value)) {
+            fmt::print("{}\n", as_bool(value) ? "true" : "false");
+        } else if (is_nil(value)) {
+            fmt::print("nil\n");
+        } else {
+            fmt::print("{}\n", cell_to_string(value));
+        }
+    }
+    else {
+        throw std::runtime_error(fmt::format("Unknown syscall: {}", name));
     }
 }
 
