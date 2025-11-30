@@ -11,7 +11,7 @@
 - The untagged pointer always points to a `datakey`, which is
   typically near the front (lowest address) of the heap-object.
 
-The following types of heap objects are supported:
+The following flavours of heap objects are supported:
 
 - Datakeys, which are values representing the type of an object.
 - Records, which are a fixed set of 64-bit fields, some of

@@ -38,6 +38,25 @@ datakeys so that they can fill those fields in correctly.
 
 ## Implementation Details
 
+### Cell Type
+Cell should be defined as a union of int64_t, double, void*, and Value (tagged 64-bit). 
+This provides type safety while compiling to identical code as a raw uint64_t.
+
+### Pool Structure
+The Pool class wraps a std::vector<Cell> for simplicity. The pool MUST NOT be allowed 
+to resize, since raw pointers are used throughout the system. Allocation uses a simple 
+"next allocation" pointer. Standard 8-byte alignment from malloc is sufficient.
+
+### Flavour Enumeration
+There are 5 flavours:
+- DatakeyFlavour
+- RecordFlavour
+- VectorFlavour
+- BinarrayFlavour
+- FunctionFlavour
+
+These are defined as an enum with 8-bit values.
+
 ### DatakeyDatakey Bootstrap
 The DatakeyDatakey is the first object allocated at the start of the pool. 
 Since its address is known (pool start), its self-referential datakey field 
@@ -60,6 +79,19 @@ simplicity of storage and garbage collection overheads.
 The T-block records which instruction words contain tagged pointers. This is 
 needed for garbage collection but should be OMITTED from this implementation. 
 We will add T-block support when implementing the garbage collector.
+
+For now, write the T-block Length field (L) as 0 in function-objects.
+
+### String Length Encoding
+Binarray-objects (strings) have a Length field at position -1 (before the datakey). 
+For UTF-8 strings:
+- The count is the CHARACTER count (not byte count)
+- The count INCLUDES a null terminator
+- This allows sharing strings with underlying C++ code
+
+### Allocation Failure
+When the fixed 1MB pool is exhausted, throw an exception (e.g., std::bad_alloc). 
+In the future, this will trigger garbage collection instead.
 
 ### Global Dictionary Keys
 Variable names (dictionary keys) are NOT allocated in the heap. Nutmeg is 
