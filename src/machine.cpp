@@ -317,7 +317,21 @@ std::vector<InstructionWord> Machine::compile_to_threaded(const FunctionObject* 
 }
 
 // Combined init/run function for threaded interpreter (like Poppy's init_or_run).
-// Must be a single function so labels are valid in both init and run modes.
+// 
+// Key implementation constraint: This must be a SINGLE function handling both
+// initialization and execution phases. In C++, label addresses (&&label) are only
+// valid within the function where they are defined. We cannot capture labels in
+// one function and use them in another.
+//
+// The two-phase pattern:
+// 1. Init phase (init_mode=true): Captures label addresses into opcode_map_.
+//    This must happen before any code compilation, as compile_to_threaded()
+//    depends on opcode_map_ being populated.
+// 2. Run phase (init_mode=false): Executes the compiled instruction stream
+//    using the previously captured label addresses.
+//
+// Both phases occur within the same function scope, ensuring label addresses
+// remain valid throughout the threaded interpreter's lifetime.
 void Machine::threaded_impl(std::vector<InstructionWord>* code, bool init_mode) {
     #ifdef __GNUC__
     // In init mode, just capture the labels and return.
