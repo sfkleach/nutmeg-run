@@ -3,6 +3,7 @@
 #include <vector>
 #include <optional>
 #include <cstring>
+#include <unordered_set>
 #include "bundle_reader.hpp"
 #include "machine.hpp"
 
@@ -109,14 +110,41 @@ int main(int argc, char* argv[]) {
         // Create the machine (initializes threaded interpreter).
         nutmeg::Machine machine;
         
-        // Load the binding for the entry point.
-        nutmeg::Binding binding = reader.get_binding(entry_point_name);
+        // Load all bindings transitively from the entry point.
+        std::vector<std::string> to_load = {entry_point_name};
+        std::unordered_set<std::string> loaded;
         
-        // Parse the function object, compiling to threaded code.
-        nutmeg::FunctionObject func = reader.parse_function_object(binding.value, machine.get_opcode_map());
+        while (!to_load.empty()) {
+            std::string idname = to_load.back();
+            to_load.pop_back();
+            
+            // Skip if already loaded.
+            if (loaded.count(idname) > 0) {
+                continue;
+            }
+            loaded.insert(idname);
+            
+            // Load the binding.
+            nutmeg::Binding binding = reader.get_binding(idname);
+            
+            // Parse and register the function in globals.
+            nutmeg::FunctionObject func = reader.parse_function_object(binding.value, machine.get_opcode_map());
+            nutmeg::Cell func_cell = machine.allocate_function(std::make_unique<nutmeg::FunctionObject>(std::move(func)));
+            machine.define_global(idname, func_cell);
+            
+            // Add dependencies to the load queue.
+            std::vector<std::string> deps = reader.get_dependencies(idname);
+            for (const auto& dep : deps) {
+                if (loaded.count(dep) == 0) {
+                    to_load.push_back(dep);
+                }
+            }
+        }
         
-        // Execute.
-        machine.execute(&func);
+        // Execute the entry point.
+        nutmeg::Cell entry_func = machine.lookup_global(entry_point_name);
+        nutmeg::FunctionObject* func_ptr = machine.get_function(entry_func);
+        machine.execute(func_ptr);
         
         return 0;
         
