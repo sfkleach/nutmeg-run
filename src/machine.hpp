@@ -3,17 +3,13 @@
 
 #include "value.hpp"
 #include "function_object.hpp"
+#include "heap.hpp"
 #include <vector>
 #include <unordered_map>
 #include <string>
 #include <memory>
 
 namespace nutmeg {
-
-// Heap-allocated string object.
-struct HeapString {
-    std::string value;
-};
 
 // The virtual machine with dual-stack architecture.
 class Machine {
@@ -28,13 +24,10 @@ private:
     std::unordered_map<std::string, Cell> globals_;
     
     // Heap for objects (strings, function objects, etc.).
-    // For now, using simple vector with manual memory management.
-    // In a real implementation, this would be a garbage collector (defensive check).
-    std::vector<std::unique_ptr<HeapString>> string_heap_;
-    std::vector<std::unique_ptr<FunctionObject>> function_heap_;
+    Heap heap_;
     
     // Current function being executed (for local variable access).
-    FunctionObject* current_function_;
+    HeapCell* current_function_;  // Now points to heap object.
     int pc_;  // Program counter.
     
     // Threaded interpreter support.
@@ -65,13 +58,16 @@ public:
     
     // Heap allocation.
     Cell allocate_string(const std::string& value);
-    std::string* get_string(Cell cell);
+    const char* get_string(Cell cell);
     
-    Cell allocate_function(std::unique_ptr<FunctionObject> func);
-    FunctionObject* get_function(Cell cell);
+    Cell allocate_function(const std::vector<InstructionWord>& code, int nlocals, int nparams);
+    HeapCell* get_function_ptr(Cell cell);
+    
+    // Get the heap for external use (e.g., initializing globals).
+    Heap& get_heap() { return heap_; }
     
     // Execution.
-    void execute(FunctionObject* func);
+    void execute(HeapCell* func_ptr);
     
 private:
     void execute_syscall(const std::string& name, int nargs);

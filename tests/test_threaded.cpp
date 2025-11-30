@@ -10,9 +10,9 @@ TEST_CASE("Threaded interpreter can execute simple function", "[threaded]") {
     const auto& opcode_map = machine.get_opcode_map();
     
     // Create a simple function: push 42, push 100.
-    auto func = std::make_unique<FunctionObject>();
-    func->nlocals = 0;
-    func->nparams = 0;
+    FunctionObject func;
+    func.nlocals = 0;
+    func.nparams = 0;
     
     // Compile to threaded code: PUSH_INT 42, PUSH_INT 100, HALT.
     InstructionWord w1, w2, w3, w4, w5;
@@ -21,9 +21,10 @@ TEST_CASE("Threaded interpreter can execute simple function", "[threaded]") {
     w3.label_addr = opcode_map.at(Opcode::PUSH_INT);
     w4.i64 = 100;
     w5.label_addr = opcode_map.at(Opcode::HALT);
-    func->code = {w1, w2, w3, w4, w5};
+    func.code = {w1, w2, w3, w4, w5};
     
-    FunctionObject* func_ptr = func.get();
+    Cell func_cell = machine.allocate_function(func.code, func.nlocals, func.nparams);
+    HeapCell* func_ptr = machine.get_function_ptr(func_cell);
     machine.execute(func_ptr);
     
     // Should have 2 values on stack.
@@ -36,9 +37,9 @@ TEST_CASE("Threaded interpreter can handle strings", "[threaded]") {
     Machine machine;
     const auto& opcode_map = machine.get_opcode_map();
     
-    auto func = std::make_unique<FunctionObject>();
-    func->nlocals = 0;
-    func->nparams = 0;
+    FunctionObject func;
+    func.nlocals = 0;
+    func.nparams = 0;
     
     // Compile to threaded code: PUSH_STRING "hello", HALT.
     static std::string test_str = "hello";
@@ -46,13 +47,14 @@ TEST_CASE("Threaded interpreter can handle strings", "[threaded]") {
     w1.label_addr = opcode_map.at(Opcode::PUSH_STRING);
     w2.str_ptr = &test_str;
     w3.label_addr = opcode_map.at(Opcode::HALT);
-    func->code = {w1, w2, w3};
+    func.code = {w1, w2, w3};
     
-    FunctionObject* func_ptr = func.get();
+    Cell func_cell = machine.allocate_function(func.code, func.nlocals, func.nparams);
+    HeapCell* func_ptr = machine.get_function_ptr(func_cell);
     machine.execute(func_ptr);
     
     REQUIRE(machine.stack_size() == 1);
     Cell str = machine.pop();
     REQUIRE(is_ptr(str));
-    REQUIRE(*machine.get_string(str) == "hello");
+    REQUIRE(std::string(machine.get_string(str)) == "hello");
 }

@@ -79,48 +79,77 @@ bool Machine::has_global(const std::string& name) const {
 
 // Heap allocation.
 Cell Machine::allocate_string(const std::string& value) {
-    auto str = std::make_unique<HeapString>();
-    str->value = value;
-    HeapString* ptr = str.get();
-    string_heap_.push_back(std::move(str));
-    return make_ptr(ptr);
+    // Allocate string in heap (includes null terminator in char_count).
+    size_t char_count = value.size() + 1;
+    HeapCell* obj_ptr = heap_.allocate_string(value.c_str(), char_count);
+    return make_ptr(obj_ptr);
 }
 
-std::string* Machine::get_string(Cell cell) {
+const char* Machine::get_string(Cell cell) {
     if (!is_ptr(cell)) {
         throw std::runtime_error("Cell is not a pointer");
     }
-    HeapString* heap_str = static_cast<HeapString*>(as_ptr(cell));
-    return &heap_str->value;
+    HeapCell* obj_ptr = static_cast<HeapCell*>(as_ptr(cell));
+    return heap_.get_string_data(obj_ptr);
 }
 
-Cell Machine::allocate_function(std::unique_ptr<FunctionObject> func) {
-    FunctionObject* ptr = func.get();
-    function_heap_.push_back(std::move(func));
-    return make_ptr(ptr);
+Cell Machine::allocate_function(const std::vector<InstructionWord>& code, int nlocals, int nparams) {
+    // Allocate function in heap.
+    HeapCell* obj_ptr = heap_.allocate_function(code.size(), nlocals, nparams);
+    
+    // Copy instruction words into the heap.
+    HeapCell* code_ptr = heap_.get_function_code(obj_ptr);
+    for (size_t i = 0; i < code.size(); i++) {
+        code_ptr[i].u64 = code[i].u64;
+    }
+    
+    return make_ptr(obj_ptr);
 }
 
-FunctionObject* Machine::get_function(Cell cell) {
+HeapCell* Machine::get_function_ptr(Cell cell) {
     if (!is_ptr(cell)) {
         throw std::runtime_error("Cell is not a pointer");
     }
-    return static_cast<FunctionObject*>(as_ptr(cell));
+    return static_cast<HeapCell*>(as_ptr(cell));
 }
 
 // Execution using threaded interpreter.
-void Machine::execute(FunctionObject* func) {
-    current_function_ = func;
+void Machine::execute(HeapCell* func_ptr) {
+    current_function_ = func_ptr;
+    
+    int nlocals = heap_.get_function_nlocals(func_ptr);
     
     // Reserve space for local variables on the return stack.
-    for (int i = 0; i < func->nlocals; i++) {
+    for (int i = 0; i < nlocals; i++) {
         push_return(make_nil());
     }
     
+    // Get the instruction code and create a temporary vector for threaded_impl.
+    HeapCell* code_ptr = heap_.get_function_code(func_ptr);
+    // We need to determine the code length - for now, scan until we hit HALT.
+    // This is a bit hacky but works since we always append HALT.
+    size_t code_length = 0;
+    while (true) {
+        void* label = code_ptr[code_length].ptr;
+        code_length++;
+        if (label == opcode_map_[Opcode::HALT]) {
+            break;
+        }
+        // Skip operands based on instruction type (simplified for now).
+        // This is imperfect but will work for our current instructions.
+    }
+    
+    // Create a temporary vector view of the code.
+    std::vector<InstructionWord> code_view(code_length);
+    for (size_t i = 0; i < code_length; i++) {
+        code_view[i].u64 = code_ptr[i].u64;
+    }
+    
     // Execute the pre-compiled threaded code.
-    threaded_impl(&func->code, false);
+    threaded_impl(&code_view, false);
     
     // Clean up local variables.
-    for (int i = 0; i < func->nlocals; i++) {
+    for (int i = 0; i < nlocals; i++) {
         pop_return();
     }
 }
@@ -138,8 +167,8 @@ void Machine::execute_syscall(const std::string& name, int nargs) {
             fmt::print("{}\n", as_int(value));
         } else if (is_ptr(value)) {
             // Assume it's a string pointer (defensive check).
-            std::string* str = get_string(value);
-            fmt::print("{}\n", *str);
+            const char* str = get_string(value);
+            fmt::print("{}\n", str);
         } else if (is_bool(value)) {
             fmt::print("{}\n", as_bool(value) ? "true" : "false");
         } else if (is_nil(value)) {
@@ -211,14 +240,16 @@ void Machine::threaded_impl(std::vector<InstructionWord>* code, bool init_mode) 
     L_POP_LOCAL: {
         int64_t idx = (pc++)->i64;
         Cell value = pop();
-        size_t offset = return_stack_.size() - current_function_->nlocals + idx;
+        int nlocals = heap_.get_function_nlocals(current_function_);
+        size_t offset = return_stack_.size() - nlocals + idx;
         return_stack_[offset] = value;
         goto *(pc++)->label_addr;
     }
     
     L_PUSH_LOCAL: {
         int64_t idx = (pc++)->i64;
-        size_t offset = return_stack_.size() - current_function_->nlocals + idx;
+        int nlocals = heap_.get_function_nlocals(current_function_);
+        size_t offset = return_stack_.size() - nlocals + idx;
         push(return_stack_[offset]);
         goto *(pc++)->label_addr;
     }
@@ -234,7 +265,7 @@ void Machine::threaded_impl(std::vector<InstructionWord>* code, bool init_mode) 
         int64_t nargs = (pc++)->i64;
         (void)nargs;  // Not used yet.
         Cell func_cell = lookup_global(*name);
-        FunctionObject* callee = get_function(func_cell);
+        HeapCell* callee = get_function_ptr(func_cell);
         // For now, execute inline (proper call stack management needed).
         execute(callee);
         goto *(pc++)->label_addr;

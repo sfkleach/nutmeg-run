@@ -129,7 +129,7 @@ int main(int argc, char* argv[]) {
             
             // Parse and register the function in globals.
             nutmeg::FunctionObject func = reader.parse_function_object(binding.value, machine.get_opcode_map());
-            nutmeg::Cell func_cell = machine.allocate_function(std::make_unique<nutmeg::FunctionObject>(std::move(func)));
+            nutmeg::Cell func_cell = machine.allocate_function(func.code, func.nlocals, func.nparams);
             machine.define_global(idname, func_cell);
             
             // Add dependencies to the load queue.
@@ -143,7 +143,7 @@ int main(int argc, char* argv[]) {
         
         // Execute the entry point.
         nutmeg::Cell entry_func = machine.lookup_global(entry_point_name);
-        nutmeg::FunctionObject* func_ptr = machine.get_function(entry_func);
+        nutmeg::HeapCell* func_ptr = machine.get_function_ptr(entry_func);
         machine.execute(func_ptr);
         
         return 0;
