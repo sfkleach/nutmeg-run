@@ -1,5 +1,8 @@
 # Transition to using a threaded interpreter
 
+Goal: to change the implementation of the intepreter while still correctly
+implementing the `helloworld.bundle`.
+
 In the poppy interpreter, we used a threaded interpreter as follows. Our next 
 task is to adapt this structure for our Nutmeg machine. This does mean that 
 we will need to adapt the implementation of `instruction.hpp` amongst other

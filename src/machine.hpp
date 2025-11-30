@@ -10,6 +10,17 @@
 
 namespace nutmeg {
 
+// Instruction word - a union that can hold different types for threaded interpreter.
+// In threaded code, instructions are sequences of these words.
+union InstructionWord {
+    void* label_addr;           // Address of instruction handler label.
+    int64_t i64;               // Integer immediate value.
+    uint64_t u64;              // Unsigned integer.
+    Cell cell;                 // Tagged cell value.
+    std::string* str_ptr;      // Pointer to string.
+    void* ptr;                 // Generic pointer.
+};
+
 // Heap-allocated string object.
 struct HeapString {
     std::string value;
@@ -37,9 +48,16 @@ private:
     FunctionObject* current_function_;
     int pc_;  // Program counter.
     
+    // Threaded interpreter support.
+    std::unordered_map<Opcode, void*> opcode_map_;  // Maps opcodes to label addresses.
+    bool threaded_mode_;  // Whether to use threaded interpreter.
+    
 public:
     Machine();
     ~Machine();
+    
+    // Initialize the threaded interpreter (populates opcode_map_).
+    void init_threaded();
     
     // Stack operations.
     void push(Cell value);
@@ -67,9 +85,18 @@ public:
     // Execution.
     void execute(FunctionObject* func);
     
+    // Threaded execution (experimental).
+    void execute_threaded(FunctionObject* func);
+    
 private:
     void execute_instruction(const Instruction& inst);
     void execute_syscall(const std::string& name, int nargs);
+    
+    // Compile function to threaded code.
+    std::vector<InstructionWord> compile_to_threaded(const FunctionObject* func);
+    
+    // Combined init/run function for threaded interpreter (like Poppy).
+    void threaded_impl(std::vector<InstructionWord>* code, bool init_mode);
 };
 
 } // namespace nutmeg

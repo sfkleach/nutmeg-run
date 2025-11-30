@@ -53,11 +53,13 @@ TEST_CASE("Machine can execute simple function", "[machine]") {
     
     Instruction inst1;
     inst1.type = "PushInt";
+    inst1.opcode = string_to_opcode("PushInt");
     inst1.index = 42;
     func->instructions.push_back(inst1);
     
     Instruction inst2;
     inst2.type = "PushInt";
+    inst2.opcode = string_to_opcode("PushInt");
     inst2.index = 100;
     func->instructions.push_back(inst2);
     

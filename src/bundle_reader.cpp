@@ -119,6 +119,7 @@ FunctionObject BundleReader::parse_function_object(const std::string& json_str) 
         for (const auto& inst_json : j.at("instructions")) {
             Instruction inst;
             inst.type = inst_json.at("type").get<std::string>();
+            inst.opcode = string_to_opcode(inst.type);  // Map to opcode.
 
             // Optional fields.
             if (inst_json.contains("index")) {
