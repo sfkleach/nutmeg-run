@@ -6,6 +6,7 @@
 #include <unordered_set>
 #include "bundle_reader.hpp"
 #include "machine.hpp"
+#include "heap.hpp"
 
 struct CommandLineArgs {
     std::optional<std::string> entry_point;
@@ -111,38 +112,20 @@ int main(int argc, char* argv[]) {
         nutmeg::Machine machine;
         
         // Load all bindings transitively from the entry point.
-        std::vector<std::string> to_load = {entry_point_name};
-        std::unordered_set<std::string> loaded;
-        
-        while (!to_load.empty()) {
-            std::string idname = to_load.back();
-            to_load.pop_back();
-            
-            // Skip if already loaded.
-            if (loaded.count(idname) > 0) {
-                continue;
-            }
-            loaded.insert(idname);
-            
-            // Load the binding.
+        std::vector<std::string> deps = reader.get_dependencies(entry_point_name);
+        for (const auto& idname : deps) {
+            fmt::print("Dependency: {}\n", idname);
             nutmeg::Binding binding = reader.get_binding(idname);
-            
-            // Parse and register the function in globals.
             nutmeg::FunctionObject func = machine.parse_function_object(binding.value);
-            nutmeg::Cell func_cell = machine.allocate_function(func.code, func.nlocals, func.nparams);
-            machine.define_global(idname, func_cell);
-            
-            // Add dependencies to the load queue.
-            std::vector<std::string> deps = reader.get_dependencies(idname);
-            for (const auto& dep : deps) {
-                if (loaded.count(dep) == 0) {
-                    to_load.push_back(dep);
-                }
-            }
+            nutmeg::Cell* func_obj = machine.allocate_function(func.code, func.nlocals, func.nparams);
+            machine.define_global(idname, make_tagged_ptr(func_obj));
+            fmt::print("Loaded func_object {}\n", static_cast<void*>(func_obj));
+            fmt::print("Recovering func object: {}\n", as_detagged_ptr(make_tagged_ptr(func_obj)));
         }
         
         // Get the entry point function and execute it.
         nutmeg::Cell* entry_func_ptr = machine.get_global_cell_ptr(entry_point_name);
+        fmt::print("Recovered func_object {}\n", static_cast<void*>(entry_func_ptr));
         machine.execute(entry_func_ptr);
         
         return 0;

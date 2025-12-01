@@ -23,8 +23,7 @@ TEST_CASE("Threaded interpreter can execute simple function", "[threaded]") {
     w5.label_addr = opcode_map.at(Opcode::HALT);
     func.code = {w1, w2, w3, w4, w5};
     
-    Cell func_cell = machine.allocate_function(func.code, func.nlocals, func.nparams);
-    Cell* func_ptr = machine.get_function_ptr(func_cell);
+    Cell* func_ptr = machine.allocate_function(func.code, func.nlocals, func.nparams);
     machine.execute(func_ptr);
     
     // Should have 2 values on stack.
@@ -49,8 +48,7 @@ TEST_CASE("Threaded interpreter can handle strings", "[threaded]") {
     w3.label_addr = opcode_map.at(Opcode::HALT);
     func.code = {w1, w2, w3};
     
-    Cell func_cell = machine.allocate_function(func.code, func.nlocals, func.nparams);
-    Cell* func_ptr = machine.get_function_ptr(func_cell);
+    Cell* func_ptr = machine.allocate_function(func.code, func.nlocals, func.nparams);
     machine.execute(func_ptr);
     
     REQUIRE(machine.stack_size() == 1);

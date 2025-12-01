@@ -3,6 +3,7 @@
 #include <nlohmann/json.hpp>
 #include <stdexcept>
 #include <fmt/core.h>
+#include <iostream>
 
 namespace nutmeg {
 
@@ -64,7 +65,7 @@ Cell Machine::pop_return() {
 
 // Global dictionary operations.
 void Machine::define_global(const std::string& name, Cell value) {
-    globals_[name] = Indirection<Cell>(value);
+    globals_[name] = new Ident{value};
 }
 
 Cell Machine::lookup_global(const std::string& name) const {
@@ -72,7 +73,7 @@ Cell Machine::lookup_global(const std::string& name) const {
     if (it == globals_.end()) {
         throw std::runtime_error(fmt::format("Undefined global: {}", name));
     }
-    return *it->second;
+    return it->second->cell;
 }
 
 bool Machine::has_global(const std::string& name) const {
@@ -84,7 +85,8 @@ Cell* Machine::get_global_cell_ptr(const std::string& name) {
     if (it == globals_.end()) {
         throw std::runtime_error(fmt::format("Undefined global: {}", name));
     }
-    return it->second.get_ptr();
+    // The cell contains a tagged pointer - detag it to get the actual function pointer.
+    return static_cast<Cell*>(as_detagged_ptr(it->second->cell));
 }
 
 // Heap allocation.
@@ -103,17 +105,18 @@ const char* Machine::get_string(Cell cell) {
     return heap_.get_string_data(obj_ptr);
 }
 
-Cell Machine::allocate_function(const std::vector<Cell>& code, int nlocals, int nparams) {
+Cell* Machine::allocate_function(const std::vector<Cell>& code, int nlocals, int nparams) {
     // Allocate function in heap.
     Cell* obj_ptr = heap_.allocate_function(code.size(), nlocals, nparams);
     
     // Copy instruction words into the heap.
     Cell* code_ptr = heap_.get_function_code(obj_ptr);
     for (size_t i = 0; i < code.size(); i++) {
-        code_ptr[i].u64 = code[i].u64;
+        code_ptr[i] = code[i];
+        // fmt::print("allocate_function: code[{}] = {}\n", i, static_cast<void*>(code[i].label_addr));
     }
     
-    return make_tagged_ptr(obj_ptr);
+    return obj_ptr;
 }
 
 Cell* Machine::get_function_ptr(Cell cell) {
@@ -125,13 +128,24 @@ Cell* Machine::get_function_ptr(Cell cell) {
 
 // Execution entry point - only used for initial launch from main and tests.
 // Creates a minimal launcher: LAUNCH HALT.
-void Machine::execute(Cell* func_ptr) {
+void Machine::execute(Cell* func_obj) {
     fmt::print("execute() called\n");
+
+    // Display the structure of the function object for debugging.
+    fmt::print("Length of instructions: {}\n", as_detagged_int(func_obj[-2]));
+    fmt::print("T-block length: {}\n", as_detagged_int(func_obj[-1]));
+    fmt::print("FunctionDataKey: {}\n", static_cast<void*>(func_obj[0].ptr));
+    fmt::print("NLocals: {}\n", heap_.get_function_nlocals(func_obj));
+    fmt::print("NParams: {}\n", heap_.get_function_nparams(func_obj));
+    for (int i = 0; i < as_detagged_int(func_obj[-2]); i++) {
+        Cell instr = heap_.get_function_code(func_obj)[i];
+        fmt::print("Instruction[{}]: label_addr={}\n", i, static_cast<void*>(instr.label_addr));
+    }
     
     // Create tiny launcher code.
     std::vector<Cell> launcher(3);
     launcher[0].label_addr = opcode_map_[Opcode::LAUNCH];
-    launcher[1].ptr = func_ptr;
+    launcher[1].ptr = func_obj;
     launcher[2].label_addr = opcode_map_[Opcode::HALT];
     
     fmt::print("About to call threaded_impl\n");
@@ -181,6 +195,7 @@ FunctionObject Machine::parse_function_object(const std::string& json_str) {
             Instruction inst;
             inst.type = inst_json.at("type").get<std::string>();
             inst.opcode = string_to_opcode(inst.type);
+            fmt::print("Parsing instruction: {} of type {}\n", inst.type, static_cast<int>(inst.opcode));
 
             // Optional fields.
             if (inst_json.contains("index")) {
@@ -200,6 +215,7 @@ FunctionObject Machine::parse_function_object(const std::string& json_str) {
             Cell label_word;
             label_word.label_addr = opcode_map_.at(inst.opcode);
             func.code.push_back(label_word);
+            fmt::print("Compiling instruction: {} at label {}\n", inst.type, static_cast<void*>(label_word.label_addr));
             
             // Add immediate operands based on instruction type.
             switch (inst.opcode) {
@@ -349,6 +365,7 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
     L_LAUNCH: {
         fmt::print("LAUNCH\n");
         pc = LaunchInstruction(pc);
+        fmt::print("&&L_STACK_LENGTH = {}, new pc = {}\n", static_cast<void*>(&&L_STACK_LENGTH), static_cast<void*>(pc));
         goto *pc++->label_addr;
     }
 
@@ -384,15 +401,13 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
             pop_return();
         }
         
-        // Pop the func_obj pointer and restore previous function context.
+        // Pop the func_obj pointer (raw) and restore previous function context.
         Cell func_obj_cell = pop_return();
-        Cell* prev_func_obj = static_cast<Cell*>(as_detagged_ptr(func_obj_cell));
-        current_function_ = prev_func_obj;
+        current_function_ = static_cast<Cell*>(func_obj_cell.ptr);
         
-        // Restore return address.
+        // Restore return address (raw).
         Cell return_cell = pop_return();
-        Cell* return_addr = static_cast<Cell*>(as_detagged_ptr(return_cell));
-        pc = return_addr;
+        pc = static_cast<Cell*>(return_cell.ptr);
         
         // Continue execution at return address.
         goto *pc++->label_addr;
@@ -407,11 +422,28 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
     #endif
 }
 
+
+/**
+ * LaunchInstruction sets up the initial call to the program entry point.
+ * This is ONLY called once at program startup from execute(), not for regular function calls.
+ * It unconditionally creates a dummy frame at the bottom of the call stack.
+ */
 Cell * Machine::LaunchInstruction(Cell *pc)
 {
     // Read operand: func_obj pointer.
     Cell *func_obj = static_cast<Cell *>((pc++)->ptr);
 
+    // Display the structure of the function object for debugging.
+    fmt::print("Length of instructions: {}\n", as_detagged_int(func_obj[-2]));
+    fmt::print("T-block length: {}\n", as_detagged_int(func_obj[-1]));
+    fmt::print("FunctionDataKey: {}\n", static_cast<void*>(func_obj[0].ptr));  
+    fmt::print("NLocals: {}\n", heap_.get_function_nlocals(func_obj));
+    fmt::print("NParams: {}\n", heap_.get_function_nparams(func_obj));
+    for (int i = 0; i < as_detagged_int(func_obj[-2]); i++) {
+        Cell instr = heap_.get_function_code(func_obj)[i];
+        fmt::print("Instruction[{}]: label_addr={}\n", i, static_cast<void*>(instr.label_addr));
+    }
+    
     // Set current function context.
     current_function_ = func_obj;
 
@@ -424,15 +456,23 @@ Cell * Machine::LaunchInstruction(Cell *pc)
     
     // For the initial launch, create a dummy frame at the bottom of the call stack.
     // These nullptrs will never be used because HALT stops execution before RETURN.
-    push_return(make_tagged_ptr(nullptr));  // Dummy return address.
-    push_return(make_tagged_ptr(nullptr));  // Dummy func_obj.
+    Cell dummy_return;
+    dummy_return.ptr = nullptr;
+    push_return(dummy_return);  // Dummy return address.
+    
+    Cell dummy_func;
+    dummy_func.ptr = nullptr;
+    push_return(dummy_func);  // Dummy func_obj.
 
     // Save return address on return stack (points to next instruction after operand).
-    Cell *return_addr = pc;
-    push_return(make_tagged_ptr(return_addr));
+    Cell return_cell;
+    return_cell.ptr = pc;
+    push_return(return_cell);
 
     // Save func_obj pointer so RETURN can read nlocals.
-    push_return(make_tagged_ptr(func_obj));
+    Cell func_cell;
+    func_cell.ptr = func_obj;
+    push_return(func_cell);
 
     // Pop parameters from operand stack and push to return stack.
     // Operand stack has params in reverse order, so popping gives us the right order.
@@ -449,6 +489,10 @@ Cell * Machine::LaunchInstruction(Cell *pc)
 
     // Set pc to function code (caller will do the goto).
     pc = heap_.get_function_code(func_obj);
+    std::cerr << "LaunchInstruction: func_obj=" << func_obj << ", returned pc=" << pc << std::endl;
+    if (pc == func_obj) {
+        std::cerr << "ERROR: get_function_code returned func_obj itself!" << std::endl;
+    }
     return pc;
 }
 

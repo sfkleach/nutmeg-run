@@ -61,9 +61,8 @@ TEST_CASE("Machine can execute simple function", "[machine]") {
     w5.label_addr = opcode_map.at(Opcode::HALT);
     func.code = {w1, w2, w3, w4, w5};
     
-    Cell func_cell = machine.allocate_function(func.code, func.nlocals, func.nparams);
-    Cell* func_ptr = machine.get_function_ptr(func_cell);
-    machine.execute(func_ptr);
+    Cell* func_obj = machine.allocate_function(func.code, func.nlocals, func.nparams);
+    machine.execute(func_obj);
     
     // Should have 2 values on stack.
     REQUIRE(machine.stack_size() == 2);

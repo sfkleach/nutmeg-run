@@ -22,7 +22,7 @@ private:
     
     // Global dictionary mapping names to values via indirection.
     // Indirection ensures stable pointers that won't be invalidated by map resizing.
-    std::unordered_map<std::string, Indirection<Cell>> globals_;
+    std::unordered_map<std::string, Ident* > globals_;
     
     // Heap for objects (strings, function objects, etc.).
     Heap heap_;
@@ -33,9 +33,6 @@ private:
     
     // Threaded interpreter support.
     std::unordered_map<Opcode, void*> opcode_map_;  // Maps opcodes to label addresses.
-    
-    // Temporary indirection for execute() launcher (keeps pointer stable during execution).
-    std::unique_ptr<Indirection<Cell>> temp_indirection_;
     
 public:
     Machine();
@@ -65,7 +62,7 @@ public:
     Cell allocate_string(const std::string& value);
     const char* get_string(Cell cell);
     
-    Cell allocate_function(const std::vector<Cell>& code, int nlocals, int nparams);
+    Cell* allocate_function(const std::vector<Cell>& code, int nlocals, int nparams);
     Cell* get_function_ptr(Cell cell);
     
     // Parse JSON function object and compile to threaded code.
