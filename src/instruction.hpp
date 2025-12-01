@@ -13,6 +13,7 @@ enum class Opcode {
     POP_LOCAL,
     PUSH_LOCAL,
     PUSH_GLOBAL,
+    LAUNCH,
     CALL_GLOBAL_COUNTED,
     SYSCALL_COUNTED,
     STACK_LENGTH,

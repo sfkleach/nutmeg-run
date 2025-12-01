@@ -20,18 +20,22 @@ private:
     // Return stack (for function calls and local variables).
     std::vector<Cell> return_stack_;
     
-    // Global dictionary mapping names to values.
-    std::unordered_map<std::string, Cell> globals_;
+    // Global dictionary mapping names to values via indirection.
+    // Indirection ensures stable pointers that won't be invalidated by map resizing.
+    std::unordered_map<std::string, Indirection<Cell>> globals_;
     
     // Heap for objects (strings, function objects, etc.).
     Heap heap_;
     
     // Current function being executed (for local variable access).
-    HeapCell* current_function_;  // Now points to heap object.
+    Cell* current_function_;  // Now points to heap object.
     int pc_;  // Program counter.
     
     // Threaded interpreter support.
     std::unordered_map<Opcode, void*> opcode_map_;  // Maps opcodes to label addresses.
+    
+    // Temporary indirection for execute() launcher (keeps pointer stable during execution).
+    std::unique_ptr<Indirection<Cell>> temp_indirection_;
     
 public:
     Machine();
@@ -55,13 +59,14 @@ public:
     void define_global(const std::string& name, Cell value);
     Cell lookup_global(const std::string& name) const;
     bool has_global(const std::string& name) const;
+    Cell* get_global_cell_ptr(const std::string& name);
     
     // Heap allocation.
     Cell allocate_string(const std::string& value);
     const char* get_string(Cell cell);
     
-    Cell allocate_function(const std::vector<InstructionWord>& code, int nlocals, int nparams);
-    HeapCell* get_function_ptr(Cell cell);
+    Cell allocate_function(const std::vector<Cell>& code, int nlocals, int nparams);
+    Cell* get_function_ptr(Cell cell);
     
     // Parse JSON function object and compile to threaded code.
     FunctionObject parse_function_object(const std::string& json_str);
@@ -70,14 +75,15 @@ public:
     Heap& get_heap() { return heap_; }
     
     // Execution.
-    void execute(HeapCell* func_ptr);
+    void execute(Cell* func_ptr);
     
 private:
     void execute_syscall(const std::string& name, int nargs);
     
     // Combined init/run function for threaded interpreter (like Poppy).
-    void threaded_impl(std::vector<InstructionWord>* code, bool init_mode);
-};
+    void threaded_impl(std::vector<Cell> *code, bool init_mode);
+    Cell * LaunchInstruction(Cell *pc);
+}; // class Machine
 
 } // namespace nutmeg
 

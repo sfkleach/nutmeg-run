@@ -4,16 +4,9 @@
 #include <cstdint>
 #include <vector>
 #include <stdexcept>
+#include "value.hpp"
 
 namespace nutmeg {
-
-// HeapCell is a 64-bit unit of storage in the heap.
-union HeapCell {
-    int64_t i64;
-    double f64;
-    void* ptr;
-    uint64_t u64;
-};
 
 // Object flavours in the heap.
 enum class Flavour : uint8_t {
@@ -32,7 +25,7 @@ class ObjectBuilder;
 // Pool is a fixed-size linear allocation arena.
 class Pool {
 private:
-    std::vector<HeapCell> cells_;
+    std::vector<Cell> cells_;
     size_t next_free_;  // Index of next free cell.
     
 public:
@@ -40,15 +33,15 @@ public:
     
     // Allocate n cells, returns pointer to first cell.
     // Throws std::bad_alloc if insufficient space.
-    HeapCell* allocate(size_t n);
+    Cell* allocate(size_t n);
     
     // Get pointer to cell at index.
-    HeapCell* at(size_t index);
-    const HeapCell* at(size_t index) const;
+    Cell* at(size_t index);
+    const Cell* at(size_t index) const;
     
     // Get the start of the pool.
-    HeapCell* start() { return cells_.data(); }
-    const HeapCell* start() const { return cells_.data(); }
+    Cell* start() { return cells_.data(); }
+    const Cell* start() const { return cells_.data(); }
     
     // Get current allocation position.
     size_t next_free() const { return next_free_; }
@@ -61,14 +54,14 @@ public:
 // Values are accumulated in a temporary buffer, then committed to the pool atomically.
 class ObjectBuilder {
 private:
-    std::vector<HeapCell> cells_;
+    std::vector<Cell> cells_;
     Pool* pool_;  // Target pool for commit.
     
 public:
     explicit ObjectBuilder(Pool* pool);
     
     // Add a cell to the builder.
-    void add_cell(HeapCell cell);
+    void add_cell(Cell cell);
     
     // Add typed values.
     void add_u64(uint64_t value);
@@ -80,12 +73,12 @@ public:
     size_t size() const { return cells_.size(); }
     
     // Get a cell by index (for reading/modifying before commit).
-    HeapCell& operator[](size_t index) { return cells_[index]; }
-    const HeapCell& operator[](size_t index) const { return cells_[index]; }
+    Cell& operator[](size_t index) { return cells_[index]; }
+    const Cell& operator[](size_t index) const { return cells_[index]; }
     
     // Commit the accumulated cells to the pool and return pointer to first cell.
     // After commit, the builder is reset and can be reused.
-    HeapCell* commit();
+    Cell* commit();
     
     // Reset the builder without committing.
     void reset();
@@ -97,9 +90,9 @@ private:
     Pool pool_;
     
     // Pointers to the fundamental datakeys (at start of pool).
-    HeapCell* datakey_datakey_;
-    HeapCell* string_datakey_;
-    HeapCell* function_datakey_;
+    Cell* datakey_datakey_;
+    Cell* string_datakey_;
+    Cell* function_datakey_;
     
     // Initialize the fundamental datakeys();
     void init_datakeys();
@@ -108,27 +101,27 @@ public:
     Heap();
     
     // Get the fundamental datakeys.
-    HeapCell* get_datakey_datakey() const { return datakey_datakey_; }
-    HeapCell* get_string_datakey() const { return string_datakey_; }
-    HeapCell* get_function_datakey() const { return function_datakey_; }
+    Cell* get_datakey_datakey() const { return datakey_datakey_; }
+    Cell* get_string_datakey() const { return string_datakey_; }
+    Cell* get_function_datakey() const { return function_datakey_; }
     
     // Allocate a string object.
     // Returns pointer to the datakey field (the object's identity).
-    HeapCell* allocate_string(const char* str, size_t char_count);
+    Cell* allocate_string(const char* str, size_t char_count);
     
     // Allocate a function object.
     // Returns pointer to the datakey field.
-    HeapCell* allocate_function(size_t num_instructions, int nlocals, int nparams);
+    Cell* allocate_function(size_t num_instructions, int nlocals, int nparams);
     
     // Get string data from a string object pointer.
-    const char* get_string_data(HeapCell* obj_ptr) const;
+    const char* get_string_data(Cell* obj_ptr) const;
     
     // Get function instruction array from a function object pointer.
-    HeapCell* get_function_code(HeapCell* obj_ptr) const;
+    Cell* get_function_code(Cell* obj_ptr) const;
     
     // Get function metadata.
-    int get_function_nlocals(HeapCell* obj_ptr) const;
-    int get_function_nparams(HeapCell* obj_ptr) const;
+    int get_function_nlocals(Cell* obj_ptr) const;
+    int get_function_nparams(Cell* obj_ptr) const;
     
     // Get access to the pool for ObjectBuilder.
     Pool* get_pool() { return &pool_; }

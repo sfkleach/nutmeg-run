@@ -141,10 +141,9 @@ int main(int argc, char* argv[]) {
             }
         }
         
-        // Execute the entry point.
-        nutmeg::Cell entry_func = machine.lookup_global(entry_point_name);
-        nutmeg::HeapCell* func_ptr = machine.get_function_ptr(entry_func);
-        machine.execute(func_ptr);
+        // Get the entry point function and execute it.
+        nutmeg::Cell* entry_func_ptr = machine.get_global_cell_ptr(entry_point_name);
+        machine.execute(entry_func_ptr);
         
         return 0;
         
