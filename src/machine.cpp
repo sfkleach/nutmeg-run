@@ -63,6 +63,20 @@ Cell Machine::pop_return() {
     return value;
 }
 
+// Frame-based return stack access.
+// fp (frame pointer) is an index into return_stack_ pointing to the return address.
+Cell& Machine::get_return_address(size_t fp) {
+    return return_stack_[fp];
+}
+
+Cell& Machine::get_frame_function_object(size_t fp) {
+    return return_stack_[fp + 1];
+}
+
+Cell& Machine::get_local_variable(size_t fp, int i) {
+    return return_stack_[fp + 2 + i];
+}
+
 // Global dictionary operations.
 void Machine::define_global(const std::string& name, Cell value) {
     globals_[name] = new Ident{value};
@@ -87,6 +101,14 @@ Cell* Machine::get_global_cell_ptr(const std::string& name) {
     }
     // The cell contains a tagged pointer - detag it to get the actual function pointer.
     return static_cast<Cell*>(as_detagged_ptr(it->second->cell));
+}
+
+Ident * Machine::lookup_ident(const std::string& name) const {
+    auto it = globals_.find(name);
+    if (it == globals_.end()) {
+        return nullptr;
+    }
+    return it->second;
 }
 
 // Heap allocation.
@@ -200,6 +222,8 @@ FunctionObject Machine::parse_function_object(const std::string& json_str) {
             // Optional fields.
             if (inst_json.contains("index")) {
                 inst.index = inst_json.at("index").get<int>();
+                fmt::print("  Found index field: {}\n", inst.index.value());
+                fmt::print("  index.hasvalue() = {}\n", inst.index.has_value());
             }
             if (inst_json.contains("value")) {
                 inst.value = inst_json.at("value").get<std::string>();
@@ -246,7 +270,19 @@ FunctionObject Machine::parse_function_object(const std::string& json_str) {
                 break;
             }
             
-            case Opcode::SYSCALL_COUNTED:
+            case Opcode::SYSCALL_COUNTED: {
+                if (!inst.nargs.has_value()) {
+                    throw std::runtime_error("SYSCALL_COUNTED requires an nargs field");
+                }
+                Ident * id = lookup_ident(inst.name.value());
+                if (id == nullptr) {
+                    throw std::runtime_error(fmt::format("Undefined syscall: {}", inst.name.value()));
+                }
+                func.code.push_back(make_raw_i64(inst.nargs.value()));
+                func.code.push_back(make_raw_ptr(id));
+                break;
+            }
+
             case Opcode::CALL_GLOBAL_COUNTED: {
                 Cell name_word, nargs_word;
                 static thread_local std::vector<std::string> string_storage;
@@ -258,7 +294,17 @@ FunctionObject Machine::parse_function_object(const std::string& json_str) {
                 break;
             }
             
-            case Opcode::STACK_LENGTH:
+            case Opcode::STACK_LENGTH: {
+                // We will assign the current stack length into the local
+                // variable defined by index.
+                if (!inst.index.has_value()) {
+                    throw std::runtime_error("STACK_LENGTH requires an index field");
+                }
+                fmt::print("  STACK_LENGTH compiling with index={}\n", inst.index.value());
+                func.code.push_back(make_raw_i64(inst.index.value()));
+                break;
+            }
+
             case Opcode::RETURN:
             case Opcode::HALT:
                 // No operands.
@@ -379,15 +425,23 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
     
     L_SYSCALL_COUNTED: {
         fmt::print("SYSCALL_COUNTED\n");
-        std::string* name = (pc++)->str_ptr;
-        int64_t nargs = (pc++)->i64;
-        execute_syscall(*name, static_cast<int>(nargs));
+        int count = (pc++)->i64;
+        Ident * id = static_cast<Ident*>((pc++)->ptr);
+        // TODO
+        // execute_syscall(*name, static_cast<int>(nargs));
         goto *(pc++)->label_addr;
     }
     
     L_STACK_LENGTH: {
+        // Assign the current stack length into the local variable defined by 
+        // the operand, which is a raw i64.
         fmt::print("STACK_LENGTH\n");
-        push(make_tagged_int(static_cast<int64_t>(operand_stack_.size())));
+        int64_t local_idx = (pc++)->i64;
+        
+        // Assign to the local variable at local_idx in the return frame.
+        // Index from the end of the return stack.
+        return_stack_[return_stack_.size() - heap_.get_function_nlocals(current_function_) + local_idx] = make_tagged_int(static_cast<int64_t>(operand_stack_.size()));
+
         goto *(pc++)->label_addr;
     }
     
@@ -474,6 +528,12 @@ Cell * Machine::LaunchInstruction(Cell *pc)
     func_cell.ptr = func_obj;
     push_return(func_cell);
 
+    // Initialize remaining locals to nil.
+    for (int i = nparams; i < nlocals; i++)
+    {
+        push_return(make_nil());
+    }
+
     // Pop parameters from operand stack and push to return stack.
     // Operand stack has params in reverse order, so popping gives us the right order.
     for (int i = 0; i < nparams; i++)
@@ -481,11 +541,6 @@ Cell * Machine::LaunchInstruction(Cell *pc)
         push_return(pop());
     }
 
-    // Initialize remaining locals to nil.
-    for (int i = nparams; i < nlocals; i++)
-    {
-        push_return(make_nil());
-    }
 
     // Set pc to function code (caller will do the goto).
     pc = heap_.get_function_code(func_obj);

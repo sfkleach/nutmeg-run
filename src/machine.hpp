@@ -52,11 +52,18 @@ public:
     void push_return(Cell value);
     Cell pop_return();
     
+    // Frame-based return stack access (fp = frame pointer, index into return_stack_).
+    Cell& get_return_address(size_t fp);
+    Cell& get_frame_function_object(size_t fp);
+    Cell& get_local_variable(size_t fp, int i);
+    
     // Global dictionary operations.
     void define_global(const std::string& name, Cell value);
     Cell lookup_global(const std::string& name) const;
     bool has_global(const std::string& name) const;
     Cell* get_global_cell_ptr(const std::string& name);
+    Ident * lookup_ident(const std::string& name) const;
+
     
     // Heap allocation.
     Cell allocate_string(const std::string& value);

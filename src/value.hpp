@@ -27,6 +27,18 @@ constexpr uint64_t TAG_SPECIAL = 0x7;  // 111 pattern.
 constexpr uint64_t TAG_MASK_2BIT = 0x3;  // For x00 and x10.
 constexpr uint64_t TAG_MASK_3BIT = 0x7;  // For 001 and 111.
 
+inline Cell make_raw_i64(int64_t value) {
+    Cell c;
+    c.i64 = value;
+    return c;
+}
+
+inline Cell make_raw_ptr(void* ptr) {
+    Cell c;
+    c.ptr = ptr;
+    return c;
+}
+
 // Integer operations (x00 tag - 62-bit integers).
 // Bit 2 is the low-order bit of the integer, bits 0-1 are always 00.
 // Even integers: 000, odd integers: 100.
@@ -85,7 +97,10 @@ inline void* as_detagged_ptr(Cell cell) {
     // static_cast, fmt::print may print the address of a temporary rather than the pointer value
     // itself. The cast generates no additional code (verified via assembly inspection) but changes
     // how the value is presented to template instantiation, avoiding the issue.
-    return static_cast<void*>(reinterpret_cast<void*>(cell.u64 & ~TAG_MASK_3BIT));
+    Cell c;
+    c.u64 = cell.u64 & ~TAG_MASK_3BIT;
+    return c.ptr;
+    // return static_cast<void*>(reinterpret_cast<void*>(cell.u64 & ~TAG_MASK_3BIT));
 }
 
 inline bool is_tagged_ptr(Cell cell) {
