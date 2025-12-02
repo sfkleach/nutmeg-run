@@ -44,7 +44,9 @@ public:
     // Stack operations.
     void push(Cell value);
     Cell pop();
+    void pop_multiple(size_t count);
     Cell peek() const;
+    Cell peek_at(size_t index) const;
     bool empty() const;
     size_t stack_size() const;
     

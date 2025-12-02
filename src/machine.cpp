@@ -1,5 +1,6 @@
 #include "machine.hpp"
 #include "instruction.hpp"
+#include "sysfunctions.hpp"
 #include <nlohmann/json.hpp>
 #include <stdexcept>
 #include <fmt/core.h>
@@ -34,11 +35,25 @@ Cell Machine::pop() {
     return value;
 }
 
+void Machine::pop_multiple(size_t count) {
+    if (operand_stack_.size() < count) {
+        throw std::runtime_error("Stack underflow");
+    }
+    operand_stack_.resize(operand_stack_.size() - count);
+}
+
 Cell Machine::peek() const {
     if (operand_stack_.empty()) {
         throw std::runtime_error("Stack is empty");
     }
     return operand_stack_.back();
+}
+
+Cell Machine::peek_at(size_t index) const {
+    if (index >= operand_stack_.size()) {
+        throw std::runtime_error("Stack index out of bounds");
+    }
+    return operand_stack_[index];
 }
 
 bool Machine::empty() const {
@@ -278,8 +293,19 @@ FunctionObject Machine::parse_function_object(const std::string& json_str) {
                     throw std::runtime_error("SYSCALL_COUNTED requires a name field");
                 }
                 fmt::print("  SYSCALL_COUNTED compiling with index={} name={}\n", inst.index.value(), inst.name.value());
-                // L_SYSCALL_COUNTED requires two operands: the count and the pointer to the
-                // implementing function.
+                // L_SYSCALL_COUNTED requires two operands: the index and the sys-function pointer.
+                Cell index_operand = make_raw_i64(inst.index.value());
+                func.code.push_back(index_operand);
+                
+                // Look up sys-function in the table.
+                auto it = sysfunctions_table.find(inst.name.value());
+                if (it == sysfunctions_table.end()) {
+                    throw std::runtime_error(fmt::format("Unknown sys-function: {}", inst.name.value()));
+                }
+                SysFunction sys_function = it->second;
+                Cell func_operand;
+                func_operand.ptr = reinterpret_cast<void*>(sys_function);
+                func.code.push_back(func_operand);
                 break;
             }
 
