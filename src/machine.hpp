@@ -52,10 +52,9 @@ public:
     void push_return(Cell value);
     Cell pop_return();
     
-    // Frame-based return stack access (fp = frame pointer, index into return_stack_).
-    Cell& get_return_address(size_t fp);
-    Cell& get_frame_function_object(size_t fp);
-    Cell& get_local_variable(size_t fp, int i);
+    Cell& get_return_address();
+    Cell& get_frame_function_object();
+    Cell& get_local_variable(int offset);
     
     // Global dictionary operations.
     void define_global(const std::string& name, Cell value);

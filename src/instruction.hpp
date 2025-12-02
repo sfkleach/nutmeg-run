@@ -44,7 +44,6 @@ struct Instruction {
 
     // SYSCALL_COUNTED, CALL_GLOBAL_COUNTED.
     std::optional<std::string> name;
-    std::optional<int> nargs;
 };
 
 } // namespace nutmeg

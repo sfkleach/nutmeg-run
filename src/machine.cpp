@@ -63,18 +63,18 @@ Cell Machine::pop_return() {
     return value;
 }
 
-// Frame-based return stack access.
-// fp (frame pointer) is an index into return_stack_ pointing to the return address.
-Cell& Machine::get_return_address(size_t fp) {
-    return return_stack_[fp];
+Cell& Machine::get_return_address() {
+    return return_stack_[return_stack_.size() -1];
 }
 
-Cell& Machine::get_frame_function_object(size_t fp) {
-    return return_stack_[fp + 1];
+Cell& Machine::get_frame_function_object() {
+    return return_stack_[return_stack_.size() -2];
 }
 
-Cell& Machine::get_local_variable(size_t fp, int i) {
-    return return_stack_[fp + 2 + i];
+Cell& Machine::get_local_variable(int offset) {
+    // Note that the -3 additional offset is rolled into the supplied offset
+    // by the loader.
+    return return_stack_[return_stack_.size() - offset];
 }
 
 // Global dictionary operations.
@@ -231,9 +231,6 @@ FunctionObject Machine::parse_function_object(const std::string& json_str) {
             if (inst_json.contains("name")) {
                 inst.name = inst_json.at("name").get<std::string>();
             }
-            if (inst_json.contains("nargs")) {
-                inst.nargs = inst_json.at("nargs").get<int>();
-            }
 
             // Compile to threaded code: emit label address followed by operands.
             Cell label_word;
@@ -271,28 +268,21 @@ FunctionObject Machine::parse_function_object(const std::string& json_str) {
             }
             
             case Opcode::SYSCALL_COUNTED: {
-                if (!inst.nargs.has_value()) {
-                    throw std::runtime_error("SYSCALL_COUNTED requires an nargs field");
+                // SYSCALL has two arguments: 
+                // * index = the local variable index to get the previous stack length from, and 
+                // * name = the name of the syscall.
+                if (!inst.index.has_value()) {
+                    throw std::runtime_error("SYSCALL_COUNTED requires an index field");
                 }
-                Ident * id = lookup_ident(inst.name.value());
-                if (id == nullptr) {
-                    throw std::runtime_error(fmt::format("Undefined syscall: {}", inst.name.value()));
+                if (!inst.name.has_value()) {
+                    throw std::runtime_error("SYSCALL_COUNTED requires a name field");
                 }
-                func.code.push_back(make_raw_i64(inst.nargs.value()));
-                func.code.push_back(make_raw_ptr(id));
+                fmt::print("  SYSCALL_COUNTED compiling with index={} name={}\n", inst.index.value(), inst.name.value());
+                // L_SYSCALL_COUNTED requires two operands: the count and the pointer to the
+                // implementing function.
                 break;
             }
 
-            case Opcode::CALL_GLOBAL_COUNTED: {
-                Cell name_word, nargs_word;
-                static thread_local std::vector<std::string> string_storage;
-                string_storage.push_back(inst.name.value());
-                name_word.str_ptr = &string_storage.back();
-                nargs_word.i64 = inst.nargs.value_or(0);
-                func.code.push_back(name_word);
-                func.code.push_back(nargs_word);
-                break;
-            }
             
             case Opcode::STACK_LENGTH: {
                 // We will assign the current stack length into the local
@@ -301,7 +291,9 @@ FunctionObject Machine::parse_function_object(const std::string& json_str) {
                     throw std::runtime_error("STACK_LENGTH requires an index field");
                 }
                 fmt::print("  STACK_LENGTH compiling with index={}\n", inst.index.value());
-                func.code.push_back(make_raw_i64(inst.index.value()));
+                int offset = inst.index.value() + 3; // +3 for return address and func_obj and 0-based.
+                Cell c = make_raw_i64(offset);
+                func.code.push_back(c);
                 break;
             }
 
@@ -416,13 +408,11 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
     }
 
     L_CALL_GLOBAL_COUNTED: {
-        std::string* name = (pc++)->str_ptr;
-        int64_t nargs = (pc++)->i64;
-        (void)name;
-        (void)nargs;
-        throw std::runtime_error("CALL_GLOBAL_COUNTED not yet implemented");
+        fmt::print("CALL_GLOBAL_COUNTED\n");
+        // TODO
+        goto *(pc++)->label_addr;
     }
-    
+
     L_SYSCALL_COUNTED: {
         fmt::print("SYSCALL_COUNTED\n");
         int count = (pc++)->i64;
@@ -436,12 +426,9 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
         // Assign the current stack length into the local variable defined by 
         // the operand, which is a raw i64.
         fmt::print("STACK_LENGTH\n");
-        int64_t local_idx = (pc++)->i64;
+        int64_t offset = (pc++)->i64;
+        get_local_variable(offset) = make_tagged_int(static_cast<int64_t>(operand_stack_.size()));
         
-        // Assign to the local variable at local_idx in the return frame.
-        // Index from the end of the return stack.
-        return_stack_[return_stack_.size() - heap_.get_function_nlocals(current_function_) + local_idx] = make_tagged_int(static_cast<int64_t>(operand_stack_.size()));
-
         goto *(pc++)->label_addr;
     }
     
