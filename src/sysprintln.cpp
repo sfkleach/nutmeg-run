@@ -7,36 +7,24 @@
 namespace nutmeg {
 
 // Sys-function implementation for "println".
-// Takes a reference to a Machine and returns no results.
-// Pops a count N from the stack (as a tagged integer), then pops N values,
+// Takes a reference to a Machine and the number of arguments, and returns no results.
+// Uses nargs to determine how many values to print from the stack,
 // prints them to stdout, followed by a newline, and removes the N values.
-void sys_println(Machine& machine) {
-    // Pop the count from the stack.
-    if (machine.empty()) {
-        throw std::runtime_error("println: Stack underflow when reading count.");
-    }
-    Cell count_cell = machine.pop();
-    
-    if (!is_tagged_int(count_cell)) {
-        throw std::runtime_error("println: Count must be an integer.");
-    }
-    
-    int64_t count = as_detagged_int(count_cell);
-    
-    // Defensive check: Ensure count is non-negative (since negative counts don't make sense).
-    if (count < 0) {
-        throw std::runtime_error("println: Count cannot be negative.");
+void sys_println(Machine& machine, uint64_t nargs) {
+    // Defensive check: Ensure nargs is non-negative (since negative counts don't make sense).
+    if (nargs < 0) {
+        throw std::runtime_error("println: nargs cannot be negative.");
     }
     
     // Defensive check: Ensure we have enough values on the stack (to avoid confusion from partial pops).
-    if (machine.stack_size() < static_cast<size_t>(count)) {
+    if (machine.stack_size() < static_cast<size_t>(nargs)) {
         throw std::runtime_error("println: Stack underflow, insufficient values for count.");
     }
     
     // Print values directly from the stack by indexing from the appropriate position.
-    // The values are at operand_stack_[operand_stack_.size() - count + i] for i in [0, count).
-    size_t base_index = machine.stack_size() - count;
-    for (int64_t i = 0; i < count; ++i) {
+    // The values are at operand_stack_[operand_stack_.size() - nargs + i] for i in [0, nargs).
+    size_t base_index = machine.stack_size() - nargs;
+    for (int i = 0; i < nargs; ++i) {
         Cell value = machine.peek_at(base_index + i);
         
         if (is_tagged_int(value)) {
@@ -54,7 +42,7 @@ void sys_println(Machine& machine) {
         }
         
         // Add space between values (but not after the last one).
-        if (i + 1 < count) {
+        if (i + 1 < nargs) {
             fmt::print(" ");
         }
     }
@@ -63,7 +51,7 @@ void sys_println(Machine& machine) {
     fmt::print("\n");
     
     // Remove the N values from the stack in one step.
-    machine.pop_multiple(count);
+    machine.pop_multiple(nargs);
 }
 
 } // namespace nutmeg

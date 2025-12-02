@@ -441,10 +441,11 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
 
     L_SYSCALL_COUNTED: {
         fmt::print("SYSCALL_COUNTED\n");
-        int count = (pc++)->i64;
-        Ident * id = static_cast<Ident*>((pc++)->ptr);
-        // TODO
-        // execute_syscall(*name, static_cast<int>(nargs));
+        int64_t offset = (pc++)->i64;
+        uint64_t count = operand_stack_.size() - get_local_variable(offset).u64;
+        SysFunction sys_function = reinterpret_cast<SysFunction>((pc++)->ptr);
+        sys_function(*this, static_cast<int>(count));
+        
         goto *(pc++)->label_addr;
     }
     
