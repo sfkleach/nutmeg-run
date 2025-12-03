@@ -58,6 +58,11 @@ public:
     Cell& get_frame_function_object();
     Cell& get_local_variable(int offset);
     
+    // Pop nlocals slots from the return stack.
+    void pop_return_frame(int nlocals) {
+        return_stack_.resize(return_stack_.size() - nlocals);
+    }
+    
     // Global dictionary operations.
     void define_global(const std::string& name, Cell value);
     Cell lookup_global(const std::string& name) const;

@@ -294,7 +294,7 @@ FunctionObject Machine::parse_function_object(const std::string& json_str) {
                 }
                 fmt::print("  SYSCALL_COUNTED compiling with index={} name={}\n", inst.index.value(), inst.name.value());
                 // L_SYSCALL_COUNTED requires two operands: the index and the sys-function pointer.
-                Cell index_operand = make_raw_i64(inst.index.value());
+                Cell index_operand = make_raw_i64(inst.index.value() + 3);
                 func.code.push_back(index_operand);
                 
                 // Look up sys-function in the table.
@@ -440,9 +440,9 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
     }
 
     L_SYSCALL_COUNTED: {
-        fmt::print("SYSCALL_COUNTED\n");
         int64_t offset = (pc++)->i64;
-        uint64_t count = operand_stack_.size() - get_local_variable(offset).u64;
+        fmt::print("SYSCALL_COUNTED, offset={}, value={}\n", offset, get_local_variable(offset).i64);
+        uint64_t count = operand_stack_.size() - as_detagged_int(get_local_variable(offset));
         SysFunction sys_function = reinterpret_cast<SysFunction>((pc++)->ptr);
         sys_function(*this, static_cast<int>(count));
         
@@ -452,9 +452,9 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
     L_STACK_LENGTH: {
         // Assign the current stack length into the local variable defined by 
         // the operand, which is a raw i64.
-        fmt::print("STACK_LENGTH\n");
         int64_t offset = (pc++)->i64;
         get_local_variable(offset) = make_tagged_int(static_cast<int64_t>(operand_stack_.size()));
+        fmt::print("STACK_LENGTH, offset = {}, size = {}\n", offset, operand_stack_.size());
         
         goto *(pc++)->label_addr;
     }
@@ -462,20 +462,20 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
     L_RETURN: {
         fmt::print("RETURN\n");
         // Clean up stack frame: [return_address][func_obj][local_0]...[local_nlocals-1]
+
+        // Restore return address (raw).
+        Cell return_cell = pop_return();
+        
+        // Pop the func_obj pointer (raw) and restore previous function context.
+        Cell * func_obj = static_cast<Cell *>(pop_return().ptr);
+
         // Pop nlocals slots first.
         // Get nlocals from current_function_.
         int nlocals = heap_.get_function_nlocals(current_function_);
-        for (int i = 0; i < nlocals; i++) {
-            pop_return();
-        }
-        
-        // Pop the func_obj pointer (raw) and restore previous function context.
-        Cell func_obj_cell = pop_return();
-        current_function_ = static_cast<Cell*>(func_obj_cell.ptr);
-        
-        // Restore return address (raw).
-        Cell return_cell = pop_return();
+        pop_return_frame(nlocals);
+
         pc = static_cast<Cell*>(return_cell.ptr);
+        current_function_ = func_obj;
         
         // Continue execution at return address.
         goto *pc++->label_addr;
@@ -520,28 +520,7 @@ Cell * Machine::LaunchInstruction(Cell *pc)
     int nparams = heap_.get_function_nparams(func_obj);
 
     // Build stack frame: [return_address][func_obj][local_0]...[local_nlocals-1]
-    // This allows RETURN to unwind without knowing the function context.
     
-    // For the initial launch, create a dummy frame at the bottom of the call stack.
-    // These nullptrs will never be used because HALT stops execution before RETURN.
-    Cell dummy_return;
-    dummy_return.ptr = nullptr;
-    push_return(dummy_return);  // Dummy return address.
-    
-    Cell dummy_func;
-    dummy_func.ptr = nullptr;
-    push_return(dummy_func);  // Dummy func_obj.
-
-    // Save return address on return stack (points to next instruction after operand).
-    Cell return_cell;
-    return_cell.ptr = pc;
-    push_return(return_cell);
-
-    // Save func_obj pointer so RETURN can read nlocals.
-    Cell func_cell;
-    func_cell.ptr = func_obj;
-    push_return(func_cell);
-
     // Initialize remaining locals to nil.
     for (int i = nparams; i < nlocals; i++)
     {
@@ -554,6 +533,16 @@ Cell * Machine::LaunchInstruction(Cell *pc)
     {
         push_return(pop());
     }
+
+    // Save func_obj pointer so RETURN can read nlocals.
+    Cell func_cell;
+    func_cell.ptr = func_obj;
+    push_return(func_cell);
+
+    // Save return address on return stack (points to next instruction after operand).
+    Cell return_cell;
+    return_cell.ptr = pc;
+    push_return(return_cell);
 
 
     // Set pc to function code (caller will do the goto).

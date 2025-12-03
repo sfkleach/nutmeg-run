@@ -18,6 +18,7 @@ void sys_println(Machine& machine, uint64_t nargs) {
     
     // Defensive check: Ensure we have enough values on the stack (to avoid confusion from partial pops).
     if (machine.stack_size() < static_cast<size_t>(nargs)) {
+        fmt::print("Stack size: {}, nargs: {}\n", machine.stack_size(), nargs);
         throw std::runtime_error("println: Stack underflow, insufficient values for count.");
     }
     

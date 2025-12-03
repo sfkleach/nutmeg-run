@@ -82,3 +82,5 @@ init-decisions:
 add-decision TOPIC:
     python3 scripts/decisions.py --add "{{TOPIC}}"
 
+hello: build
+    ./_build/nutmeg-run ./test-data/helloworld.bundle
