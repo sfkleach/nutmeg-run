@@ -297,6 +297,40 @@ FunctionObject Machine::parse_function_object(const std::string& json_str) {
                 break;
             }
 
+            case Opcode::CALL_GLOBAL_COUNTED: {
+                // CALL_GLOBAL has two arguments:
+                // * index = the local variable index to get the previous stack length from, and
+                // * name = the name of the global function to call.
+                if (!inst.index.has_value()) {
+                    throw std::runtime_error("CALL_GLOBAL_COUNTED requires an index field");
+                }
+                if (!inst.name.has_value()) {
+                    throw std::runtime_error("CALL_GLOBAL_COUNTED requires a name field");
+                }
+
+                // Translate the name into an Ident* pointer.
+                Ident* ident_ptr = lookup_ident(inst.name.value());
+                if (ident_ptr == nullptr) {
+                    throw std::runtime_error(fmt::format("Undefined global function: {}", inst.name.value()));
+                }
+
+                #ifdef DEBUG1
+                fmt::print("  CALL_GLOBAL_COUNTED compiling with index={} name={} ident_ptr={}\n",
+                           inst.index.value(), inst.name.value(), static_cast<void*>(ident_ptr));
+                #endif
+
+                // Generate the index operand as a raw offset.
+                Cell index_operand = make_raw_i64(inst.index.value() + 3);
+                func.code.push_back(index_operand);
+
+                // Now push the Ident* pointer as the function operand.
+                Cell func_operand;
+                func_operand.ptr = static_cast<void*>(ident_ptr);
+                func.code.push_back(func_operand);
+                break;
+            }
+
+
             case Opcode::SYSCALL_COUNTED: {
                 // SYSCALL has two arguments:
                 // * index = the local variable index to get the previous stack length from, and
@@ -397,9 +431,13 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
     }
 
     // Run mode: execute the compiled code.
+    #ifdef DEBUG1
     fmt::print("Run mode: code->data() = {}\n", static_cast<void*>(code->data()));
+    #endif
     Cell* pc = code->data();
+    #ifdef DEBUG1
     fmt::print("pc = {}, label = {}\n", static_cast<void*>(pc), static_cast<void*>(pc->label_addr));
+    #endif
 
     // Jump to the first instruction.
     fmt::print("About to jump\n");
@@ -455,22 +493,48 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
         goto *(pc++)->label_addr;
     }
 
-    L_LAUNCH: {
-        #ifdef DEBUG1
-        fmt::print("LAUNCH\n");
-        #endif
-        pc = LaunchInstruction(pc);
-        #ifdef DEBUG1
-        fmt::print("&&L_STACK_LENGTH = {}, new pc = {}\n", static_cast<void*>(&&L_STACK_LENGTH), static_cast<void*>(pc));
-        #endif
-        goto *pc++->label_addr;
-    }
-
     L_CALL_GLOBAL_COUNTED: {
         #ifdef DEBUG1
         fmt::print("CALL_GLOBAL_COUNTED\n");
         #endif
-        // TODO
+
+        // Get the count of arguments from the local variable.
+        int64_t offset = (pc++)->i64;
+        uint64_t count = operand_stack_.size() - as_detagged_int(get_local_variable(offset));
+
+        // Get the Ident* pointer to the function to call.
+        Ident* ident_ptr = static_cast<Ident*>((pc++)->ptr);
+        Cell* func_ptr = get_function_ptr(ident_ptr->cell);
+
+        // Get the number of nlocals and nparams from the function object.
+        int nlocals = heap_.get_function_nlocals(func_ptr);
+        int nparams = heap_.get_function_nparams(func_ptr);
+
+        // Build stack frame: [return_address][func_obj][local_0]...[local_nlocals-1]
+        // Initialize remaining locals to nil.
+        for (int i = nparams; i < nlocals; i++)
+        {
+            push_return(make_nil());
+        }
+
+        // Pop parameters from operand stack and push to return stack.
+        // Operand stack has params in reverse order, so popping gives us the right order.
+        for (int i = 0; i < nparams; i++)
+        {
+            push_return(pop());
+        }
+
+        // Save func_obj pointer so RETURN can read nlocals.
+        Cell func_cell;
+        func_cell.ptr = static_cast<void*>(func_ptr);
+        push_return(func_cell);
+
+        // Save return address on return stack (points to next instruction after operand).
+        Cell return_cell;
+        return_cell.ptr = pc;
+        push_return(return_cell);
+
+
         goto *(pc++)->label_addr;
     }
 
@@ -514,21 +578,32 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
 
         // Pop nlocals slots first.
         // Get nlocals from current_function_.
-        int nlocals = heap_.get_function_nlocals(current_function_);
+        int nlocals = heap_.get_function_nlocals(func_obj);
         pop_return_frame(nlocals);
 
         pc = static_cast<Cell*>(return_cell.ptr);
-        current_function_ = func_obj;
 
         // Continue execution at return address.
         goto *pc++->label_addr;
     }
 
-    L_HALT:
+    L_HALT: {
         #ifdef DEBUG1
         fmt::print("HALT\n");
         #endif
         return;
+    }
+
+    L_LAUNCH: {
+        #ifdef DEBUG1
+        fmt::print("LAUNCH\n");
+        #endif
+        pc = LaunchInstruction(pc);
+        #ifdef DEBUG1
+        fmt::print("&&L_STACK_LENGTH = {}, new pc = {}\n", static_cast<void*>(&&L_STACK_LENGTH), static_cast<void*>(pc));
+        #endif
+        goto *pc++->label_addr;
+    }
 
     #else
     throw std::runtime_error("Threaded interpreter requires GCC/Clang");
