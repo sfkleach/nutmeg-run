@@ -13,7 +13,7 @@ find_package(nlohmann_json REQUIRED)
 # Collect sources
 file(GLOB SOURCES "${CMAKE_SOURCE_DIR}/src/*.cpp")
 add_executable(${PROJECT_NAME} ${SOURCES})
-target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_17)
+target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_20)
 target_link_libraries(${PROJECT_NAME} PRIVATE fmt::fmt SQLite::SQLite3 nlohmann_json::nlohmann_json)
 
 # Enable testing
@@ -23,6 +23,6 @@ file(GLOB TEST_SOURCES "${CMAKE_SOURCE_DIR}/tests/*.cpp")
 file(GLOB TEST_LIB_SOURCES "${CMAKE_SOURCE_DIR}/src/*.cpp")
 list(FILTER TEST_LIB_SOURCES EXCLUDE REGEX ".*main\\.cpp$")
 add_executable(tests ${TEST_SOURCES} ${TEST_LIB_SOURCES})
-target_compile_features(tests PRIVATE cxx_std_17)
+target_compile_features(tests PRIVATE cxx_std_20)
 target_link_libraries(tests PRIVATE fmt::fmt SQLite::SQLite3 nlohmann_json::nlohmann_json Catch2::Catch2WithMain)
 add_test(NAME AllTests COMMAND tests)

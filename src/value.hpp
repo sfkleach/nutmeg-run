@@ -2,7 +2,7 @@
 #define VALUE_HPP
 
 #include <cstdint>
-#include <cstring>
+#include <bit>
 #include <string>
 
 namespace nutmeg {
@@ -61,8 +61,7 @@ inline bool is_tagged_int(Cell cell) {
 // Floating point operations (x10 tag - 62-bit floats).
 // Bit 2 is the low-order bit of the float, bits 0-1 are always 10.
 inline Cell make_tagged_float(double value) {
-    uint64_t bits;
-    std::memcpy(&bits, &value, sizeof(double));
+    uint64_t bits = std::bit_cast<uint64_t>(value);
     Cell c;
     c.u64 = (bits << 2) | TAG_FLOAT;
     return c;
@@ -71,9 +70,7 @@ inline Cell make_tagged_float(double value) {
 inline double as_detagged_float(Cell cell) {
     // Right shift by 2 to extract all 62 bits.
     uint64_t bits = cell.u64 >> 2;
-    double value;
-    std::memcpy(&value, &bits, sizeof(double));
-    return value;
+    return std::bit_cast<double>(bits);
 }
 
 inline bool is_tagged_float(Cell cell) {
@@ -112,6 +109,7 @@ inline bool is_tagged_ptr(Cell cell) {
 constexpr uint64_t SPECIAL_FALSE = TAG_SPECIAL;           // 0x7
 constexpr uint64_t SPECIAL_TRUE  = (1ULL << 3) | TAG_SPECIAL;  // 0xF
 constexpr uint64_t SPECIAL_NIL   = (2ULL << 3) | TAG_SPECIAL;  // 0x17
+constexpr uint64_t SPECIAL_UNDEF   = (3ULL << 3) | TAG_SPECIAL;  // 0x1F
 
 inline Cell make_bool(bool value) {
     Cell c;
@@ -125,6 +123,12 @@ inline bool as_bool(Cell cell) {
 
 inline bool is_bool(Cell cell) {
     return cell.u64 == SPECIAL_FALSE || cell.u64 == SPECIAL_TRUE;
+}
+
+inline Cell make_undef() {
+    Cell c;
+    c.u64 = SPECIAL_UNDEF;
+    return c;
 }
 
 inline Cell make_nil() {
@@ -148,24 +152,24 @@ public:
 // class Indirection {
 // private:
 //     T* ptr_;
-    
+
 // public:
 //     Indirection() : ptr_(new T()) {}
 //     explicit Indirection(const T& value) : ptr_(new T(value)) {}
-    
+
 //     ~Indirection() {
 //         delete ptr_;
 //     }
-    
+
 //     // Disable copy to ensure single ownership.
 //     Indirection(const Indirection&) = delete;
 //     Indirection& operator=(const Indirection&) = delete;
-    
+
 //     // Enable move.
 //     Indirection(Indirection&& other) noexcept : ptr_(other.ptr_) {
 //         other.ptr_ = nullptr;
 //     }
-    
+
 //     Indirection& operator=(Indirection&& other) noexcept {
 //         if (this != &other) {
 //             delete ptr_;
@@ -174,15 +178,15 @@ public:
 //         }
 //         return *this;
 //     }
-    
+
 //     // Get stable pointer to the value.
 //     T* get_ptr() { return ptr_; }
 //     const T* get_ptr() const { return ptr_; }
-    
+
 //     // Dereference operators.
 //     T& operator*() { return *ptr_; }
 //     const T& operator*() const { return *ptr_; }
-    
+
 //     T* operator->() { return ptr_; }
 //     const T* operator->() const { return ptr_; }
 // };
