@@ -3,17 +3,13 @@
 
 #include "value.hpp"
 #include "function_object.hpp"
+#include "heap.hpp"
 #include <vector>
 #include <unordered_map>
 #include <string>
 #include <memory>
 
 namespace nutmeg {
-
-// Heap-allocated string object.
-struct HeapString {
-    std::string value;
-};
 
 // The virtual machine with dual-stack architecture.
 class Machine {
@@ -24,17 +20,15 @@ private:
     // Return stack (for function calls and local variables).
     std::vector<Cell> return_stack_;
     
-    // Global dictionary mapping names to values.
-    std::unordered_map<std::string, Cell> globals_;
+    // Global dictionary mapping names to values via indirection.
+    // Indirection ensures stable pointers that won't be invalidated by map resizing.
+    std::unordered_map<std::string, Ident* > globals_;
     
     // Heap for objects (strings, function objects, etc.).
-    // For now, using simple vector with manual memory management.
-    // In a real implementation, this would be a garbage collector (defensive check).
-    std::vector<std::unique_ptr<HeapString>> string_heap_;
-    std::vector<std::unique_ptr<FunctionObject>> function_heap_;
+    Heap heap_;
     
     // Current function being executed (for local variable access).
-    FunctionObject* current_function_;
+    Cell* current_function_;  // Now points to heap object.
     int pc_;  // Program counter.
     
     // Threaded interpreter support.
@@ -50,7 +44,9 @@ public:
     // Stack operations.
     void push(Cell value);
     Cell pop();
+    void pop_multiple(size_t count);
     Cell peek() const;
+    Cell peek_at(size_t index) const;
     bool empty() const;
     size_t stack_size() const;
     
@@ -58,27 +54,46 @@ public:
     void push_return(Cell value);
     Cell pop_return();
     
+    Cell& get_return_address();
+    Cell& get_frame_function_object();
+    Cell& get_local_variable(int offset);
+    
+    // Pop nlocals slots from the return stack.
+    void pop_return_frame(int nlocals) {
+        return_stack_.resize(return_stack_.size() - nlocals);
+    }
+    
     // Global dictionary operations.
     void define_global(const std::string& name, Cell value);
     Cell lookup_global(const std::string& name) const;
     bool has_global(const std::string& name) const;
+    Cell* get_global_cell_ptr(const std::string& name);
+    Ident * lookup_ident(const std::string& name) const;
+
     
     // Heap allocation.
     Cell allocate_string(const std::string& value);
-    std::string* get_string(Cell cell);
+    const char* get_string(Cell cell);
     
-    Cell allocate_function(std::unique_ptr<FunctionObject> func);
-    FunctionObject* get_function(Cell cell);
+    Cell* allocate_function(const std::vector<Cell>& code, int nlocals, int nparams);
+    Cell* get_function_ptr(Cell cell);
+    
+    // Parse JSON function object and compile to threaded code.
+    FunctionObject parse_function_object(const std::string& json_str);
+    
+    // Get the heap for external use (e.g., initializing globals).
+    Heap& get_heap() { return heap_; }
     
     // Execution.
-    void execute(FunctionObject* func);
+    void execute(Cell* func_ptr);
     
 private:
     void execute_syscall(const std::string& name, int nargs);
     
     // Combined init/run function for threaded interpreter (like Poppy).
-    void threaded_impl(std::vector<InstructionWord>* code, bool init_mode);
-};
+    void threaded_impl(std::vector<Cell> *code, bool init_mode);
+    Cell * LaunchInstruction(Cell *pc);
+}; // class Machine
 
 } // namespace nutmeg
 

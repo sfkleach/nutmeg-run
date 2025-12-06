@@ -60,7 +60,7 @@ remove package-name:
 # Jumpstart (install prerequisites for Debian)
 jumpstart:
     sudo apt-get update
-    sudo apt-get install -y cmake g++ pipx
+    sudo apt-get install -y cmake g++ pipx sqlite3
     @if ! command -v conan &> /dev/null; then \
         echo "Installing conan..."; \
         pipx install conan; \
@@ -82,3 +82,5 @@ init-decisions:
 add-decision TOPIC:
     python3 scripts/decisions.py --add "{{TOPIC}}"
 
+hello: build
+    ./_build/nutmeg-run ./test-data/helloworld.bundle

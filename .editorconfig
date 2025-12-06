@@ -1,0 +1,32 @@
+root = true
+
+# All files
+[*]
+charset = utf-8
+trim_trailing_whitespace = true
+insert_final_newline = true
+
+# C++ files
+[*.{cpp,hpp,h,c}]
+indent_style = space
+indent_size = 4
+max_line_length = 120
+
+# Python files
+[*.py]
+indent_style = space
+indent_size = 4
+
+# CMake files
+[CMakeLists.txt]
+indent_style = space
+indent_size = 2
+
+# JSON files
+[*.json]
+indent_style = space
+indent_size = 2
+
+# Markdown files
+[*.md]
+trim_trailing_whitespace = false

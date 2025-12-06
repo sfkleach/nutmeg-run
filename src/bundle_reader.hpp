@@ -49,9 +49,6 @@ public:
 
     // Get dependencies for a given IdName.
     std::vector<std::string> get_dependencies(const std::string& idname);
-
-    // Parse the JSON value field into a FunctionObject, compiling to threaded code.
-    FunctionObject parse_function_object(const std::string& json, const std::unordered_map<Opcode, void*>& opcode_map);
 };
 
 } // namespace nutmeg
