@@ -8,6 +8,8 @@
 #include "machine.hpp"
 #include "heap.hpp"
 
+#define DEBUG1
+
 struct CommandLineArgs {
     std::optional<std::string> entry_point;
     std::string bundle_file;
@@ -22,7 +24,7 @@ CommandLineArgs parse_args(int argc, char* argv[]) {
     // Parse options.
     while (i < argc) {
         std::string arg = argv[i];
-        
+
         // Check for --entry-point=NAME (optional form).
         if (arg.rfind("--entry-point=", 0) == 0) {
             args.entry_point = arg.substr(14);  // Length of "--entry-point=".
@@ -83,10 +85,10 @@ CommandLineArgs parse_args(int argc, char* argv[]) {
 int main(int argc, char* argv[]) {
     try {
         CommandLineArgs args = parse_args(argc, argv);
-        
+
         // Open the bundle file.
         nutmeg::BundleReader reader(args.bundle_file);
-        
+
         // Determine which entry point to use.
         std::string entry_point_name;
         if (args.entry_point) {
@@ -107,29 +109,35 @@ int main(int argc, char* argv[]) {
             }
             entry_point_name = entry_points[0];
         }
-        
+
         // Create the machine (initializes threaded interpreter).
         nutmeg::Machine machine;
-        
+
         // Load all bindings transitively from the entry point.
+        #ifdef DEBUG1
+        fmt::print("Loading entry point: {}\n", entry_point_name);
+        #endif
         std::vector<std::string> deps = reader.get_dependencies(entry_point_name);
         for (const auto& idname : deps) {
-            fmt::print("Dependency: {}\n", idname);
+            fmt::print("  Dependency: {}\n", idname);
             nutmeg::Binding binding = reader.get_binding(idname);
             nutmeg::FunctionObject func = machine.parse_function_object(binding.value);
             nutmeg::Cell* func_obj = machine.allocate_function(func.code, func.nlocals, func.nparams);
             machine.define_global(idname, make_tagged_ptr(func_obj));
-            fmt::print("Loaded func_object {}\n", static_cast<void*>(func_obj));
-            fmt::print("Recovering func object: {}\n", as_detagged_ptr(make_tagged_ptr(func_obj)));
+            fmt::print("  Loaded func_object {}\n", static_cast<void*>(func_obj));
+            fmt::print("  Recovering func object: {}\n", as_detagged_ptr(make_tagged_ptr(func_obj)));
         }
-        
+        #ifdef DEBUG1
+        fmt::print("All dependencies loaded.\n");
+        #endif
+
         // Get the entry point function and execute it.
         nutmeg::Cell* entry_func_ptr = machine.get_global_cell_ptr(entry_point_name);
         fmt::print("Recovered func_object {}\n", static_cast<void*>(entry_func_ptr));
         machine.execute(entry_func_ptr);
-        
+
         return 0;
-        
+
     } catch (const std::exception& e) {
         fmt::print(stderr, "Error: {}\n", e.what());
         return 1;

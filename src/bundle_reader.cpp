@@ -102,6 +102,9 @@ void BundleReader::get_dependencies_recursive(
     }
     seen[idname] = true;
 
+    // Add the current id to the dependencies list.
+    dependencies.push_back(idname);
+
     sqlite3_stmt* stmt = nullptr;
 
     const char* sql = "SELECT needs FROM depends_ons WHERE id_name = ?";

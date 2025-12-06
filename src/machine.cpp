@@ -6,6 +6,9 @@
 #include <fmt/core.h>
 #include <iostream>
 
+#define DEBUG1
+#define DEBUG2
+
 namespace nutmeg {
 
 Machine::Machine()
@@ -110,6 +113,12 @@ bool Machine::has_global(const std::string& name) const {
 }
 
 Cell* Machine::get_global_cell_ptr(const std::string& name) {
+    #ifdef DEBUG2
+    fmt::print("Available globals:\n");
+    for (const auto& pair : globals_) {
+        fmt::print("  {}\n", pair.first);
+    }
+    #endif
     auto it = globals_.find(name);
     if (it == globals_.end()) {
         throw std::runtime_error(fmt::format("Undefined global: {}", name));
@@ -232,13 +241,17 @@ FunctionObject Machine::parse_function_object(const std::string& json_str) {
             Instruction inst;
             inst.type = inst_json.at("type").get<std::string>();
             inst.opcode = string_to_opcode(inst.type);
-            fmt::print("Parsing instruction: {} of type {}\n", inst.type, static_cast<int>(inst.opcode));
+            #ifdef DEBUG1
+            fmt::print("  Parsing instruction: {} of type {}\n", inst.type, static_cast<int>(inst.opcode));
+            #endif
 
             // Optional fields.
             if (inst_json.contains("index")) {
                 inst.index = inst_json.at("index").get<int>();
-                fmt::print("  Found index field: {}\n", inst.index.value());
-                fmt::print("  index.hasvalue() = {}\n", inst.index.has_value());
+                #ifdef DEBUG1
+                fmt::print("    Found index field: {}\n", inst.index.value());
+                fmt::print("    index.hasvalue() = {}\n", inst.index.has_value());
+                #endif
             }
             if (inst_json.contains("value")) {
                 inst.value = inst_json.at("value").get<std::string>();
@@ -251,7 +264,9 @@ FunctionObject Machine::parse_function_object(const std::string& json_str) {
             Cell label_word;
             label_word.label_addr = opcode_map_.at(inst.opcode);
             func.code.push_back(label_word);
-            fmt::print("Compiling instruction: {} at label {}\n", inst.type, static_cast<void*>(label_word.label_addr));
+            #ifdef DEBUG1
+            fmt::print("  Compiling instruction: {} at label {}\n", inst.type, static_cast<void*>(label_word.label_addr));
+            #endif
 
             // Add immediate operands based on instruction type.
             switch (inst.opcode) {
@@ -409,6 +424,9 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
     }
 
     L_POP_LOCAL: {
+        #ifdef DEBUG1
+        fmt::print("POP_LOCAL\n");
+        #endif
         int64_t idx = (pc++)->i64;
         Cell value = pop();
         int nlocals = heap_.get_function_nlocals(current_function_);
@@ -418,6 +436,9 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
     }
 
     L_PUSH_LOCAL: {
+        #ifdef DEBUG1
+        fmt::print("PUSH_LOCAL\n");
+        #endif
         int64_t idx = (pc++)->i64;
         int nlocals = heap_.get_function_nlocals(current_function_);
         size_t offset = return_stack_.size() - nlocals + idx;
@@ -426,27 +447,40 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
     }
 
     L_PUSH_GLOBAL: {
+        #ifdef DEBUG1
+        fmt::print("PUSH_GLOBAL\n");
+        #endif
         std::string* name = (pc++)->str_ptr;
         push(lookup_global(*name));
         goto *(pc++)->label_addr;
     }
 
     L_LAUNCH: {
+        #ifdef DEBUG1
         fmt::print("LAUNCH\n");
+        #endif
         pc = LaunchInstruction(pc);
+        #ifdef DEBUG1
         fmt::print("&&L_STACK_LENGTH = {}, new pc = {}\n", static_cast<void*>(&&L_STACK_LENGTH), static_cast<void*>(pc));
+        #endif
         goto *pc++->label_addr;
     }
 
     L_CALL_GLOBAL_COUNTED: {
+        #ifdef DEBUG1
         fmt::print("CALL_GLOBAL_COUNTED\n");
+        #endif
         // TODO
         goto *(pc++)->label_addr;
     }
 
     L_SYSCALL_COUNTED: {
+        #ifdef DEBUG1
         int64_t offset = (pc++)->i64;
         fmt::print("SYSCALL_COUNTED, offset={}, value={}\n", offset, get_local_variable(offset).i64);
+        #else
+        int64_t offset = (pc++)->i64;
+        #endif
         uint64_t count = operand_stack_.size() - as_detagged_int(get_local_variable(offset));
         SysFunction sys_function = reinterpret_cast<SysFunction>((pc++)->ptr);
         sys_function(*this, static_cast<int>(count));
@@ -459,13 +493,17 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
         // the operand, which is a raw i64.
         int64_t offset = (pc++)->i64;
         get_local_variable(offset) = make_tagged_int(static_cast<int64_t>(operand_stack_.size()));
+        #ifdef DEBUG1
         fmt::print("STACK_LENGTH, offset = {}, size = {}\n", offset, operand_stack_.size());
+        #endif
 
         goto *(pc++)->label_addr;
     }
 
     L_RETURN: {
+        #ifdef DEBUG1
         fmt::print("RETURN\n");
+        #endif
         // Clean up stack frame: [return_address][func_obj][local_0]...[local_nlocals-1]
 
         // Restore return address (raw).
@@ -487,7 +525,9 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
     }
 
     L_HALT:
+        #ifdef DEBUG1
         fmt::print("HALT\n");
+        #endif
         return;
 
     #else
