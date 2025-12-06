@@ -145,14 +145,14 @@ const char* Machine::get_string(Cell cell) {
 Cell* Machine::allocate_function(const std::vector<Cell>& code, int nlocals, int nparams) {
     // Allocate function in heap.
     Cell* obj_ptr = heap_.allocate_function(code.size(), nlocals, nparams);
-    
+
     // Copy instruction words into the heap.
     Cell* code_ptr = heap_.get_function_code(obj_ptr);
     for (size_t i = 0; i < code.size(); i++) {
         code_ptr[i] = code[i];
         // fmt::print("allocate_function: code[{}] = {}\n", i, static_cast<void*>(code[i].label_addr));
     }
-    
+
     return obj_ptr;
 }
 
@@ -178,13 +178,13 @@ void Machine::execute(Cell* func_obj) {
         Cell instr = heap_.get_function_code(func_obj)[i];
         fmt::print("Instruction[{}]: label_addr={}\n", i, static_cast<void*>(instr.label_addr));
     }
-    
+
     // Create tiny launcher code.
     std::vector<Cell> launcher(3);
     launcher[0].label_addr = opcode_map_[Opcode::LAUNCH];
     launcher[1].ptr = func_obj;
     launcher[2].label_addr = opcode_map_[Opcode::HALT];
-    
+
     fmt::print("About to call threaded_impl\n");
     threaded_impl(&launcher, false);
     fmt::print("Returned from threaded_impl\n");
@@ -197,7 +197,7 @@ void Machine::execute_syscall(const std::string& name, int nargs) {
             throw std::runtime_error("println: stack underflow");
         }
         Cell value = pop();
-        
+
         // Print based on type.
         if (is_tagged_int(value)) {
             fmt::print("{}\n", as_detagged_int(value));
@@ -252,7 +252,7 @@ FunctionObject Machine::parse_function_object(const std::string& json_str) {
             label_word.label_addr = opcode_map_.at(inst.opcode);
             func.code.push_back(label_word);
             fmt::print("Compiling instruction: {} at label {}\n", inst.type, static_cast<void*>(label_word.label_addr));
-            
+
             // Add immediate operands based on instruction type.
             switch (inst.opcode) {
             case Opcode::PUSH_INT:
@@ -263,7 +263,7 @@ FunctionObject Machine::parse_function_object(const std::string& json_str) {
                 func.code.push_back(operand);
                 break;
             }
-            
+
             case Opcode::PUSH_STRING: {
                 // Allocate string in heap and store the Cell.
                 std::string str_value = inst.value.value();
@@ -271,7 +271,7 @@ FunctionObject Machine::parse_function_object(const std::string& json_str) {
                 func.code.push_back(str_cell);
                 break;
             }
-            
+
             case Opcode::PUSH_GLOBAL: {
                 // Store pointer to global name string (kept in static storage).
                 Cell operand;
@@ -281,10 +281,10 @@ FunctionObject Machine::parse_function_object(const std::string& json_str) {
                 func.code.push_back(operand);
                 break;
             }
-            
+
             case Opcode::SYSCALL_COUNTED: {
-                // SYSCALL has two arguments: 
-                // * index = the local variable index to get the previous stack length from, and 
+                // SYSCALL has two arguments:
+                // * index = the local variable index to get the previous stack length from, and
                 // * name = the name of the syscall.
                 if (!inst.index.has_value()) {
                     throw std::runtime_error("SYSCALL_COUNTED requires an index field");
@@ -296,7 +296,7 @@ FunctionObject Machine::parse_function_object(const std::string& json_str) {
                 // L_SYSCALL_COUNTED requires two operands: the index and the sys-function pointer.
                 Cell index_operand = make_raw_i64(inst.index.value() + 3);
                 func.code.push_back(index_operand);
-                
+
                 // Look up sys-function in the table.
                 auto it = sysfunctions_table.find(inst.name.value());
                 if (it == sysfunctions_table.end()) {
@@ -309,7 +309,7 @@ FunctionObject Machine::parse_function_object(const std::string& json_str) {
                 break;
             }
 
-            
+
             case Opcode::STACK_LENGTH: {
                 // We will assign the current stack length into the local
                 // variable defined by index.
@@ -329,7 +329,7 @@ FunctionObject Machine::parse_function_object(const std::string& json_str) {
                 break;
             }
         }
-        
+
         // Add HALT at the end.
         Cell halt_word;
         halt_word.label_addr = opcode_map_.at(Opcode::HALT);
@@ -344,7 +344,7 @@ FunctionObject Machine::parse_function_object(const std::string& json_str) {
 
 
 // Combined init/run function for threaded interpreter (like Poppy's init_or_run).
-// 
+//
 // Key implementation constraint: This must be a SINGLE function handling both
 // initialization and execution phases. In C++, label addresses (&&label) are only
 // valid within the function where they are defined. We cannot capture labels in
@@ -380,29 +380,34 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
         };
         return;
     }
-    
+
     // Run mode: execute the compiled code.
     fmt::print("Run mode: code->data() = {}\n", static_cast<void*>(code->data()));
     Cell* pc = code->data();
     fmt::print("pc = {}, label = {}\n", static_cast<void*>(pc), static_cast<void*>(pc->label_addr));
-    
+
     // Jump to the first instruction.
     fmt::print("About to jump\n");
     goto *pc++->label_addr;
-    
+
     L_PUSH_INT: {
+        #ifdef DEBUG1
+        fmt::print("PUSH_INT\n");
+        #endif
         int64_t value = (pc++)->i64;
         push(make_tagged_int(value));
         goto *(pc++)->label_addr;
     }
-    
+
     L_PUSH_STRING: {
+        #ifdef DEBUG1
         fmt::print("PUSH_STRING\n");
+        #endif
         Cell str_cell = *(pc++);
         push(str_cell);
         goto *(pc++)->label_addr;
     }
-    
+
     L_POP_LOCAL: {
         int64_t idx = (pc++)->i64;
         Cell value = pop();
@@ -411,7 +416,7 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
         return_stack_[offset] = value;
         goto *(pc++)->label_addr;
     }
-    
+
     L_PUSH_LOCAL: {
         int64_t idx = (pc++)->i64;
         int nlocals = heap_.get_function_nlocals(current_function_);
@@ -419,7 +424,7 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
         push(return_stack_[offset]);
         goto *(pc++)->label_addr;
     }
-    
+
     L_PUSH_GLOBAL: {
         std::string* name = (pc++)->str_ptr;
         push(lookup_global(*name));
@@ -445,27 +450,27 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
         uint64_t count = operand_stack_.size() - as_detagged_int(get_local_variable(offset));
         SysFunction sys_function = reinterpret_cast<SysFunction>((pc++)->ptr);
         sys_function(*this, static_cast<int>(count));
-        
+
         goto *(pc++)->label_addr;
     }
-    
+
     L_STACK_LENGTH: {
-        // Assign the current stack length into the local variable defined by 
+        // Assign the current stack length into the local variable defined by
         // the operand, which is a raw i64.
         int64_t offset = (pc++)->i64;
         get_local_variable(offset) = make_tagged_int(static_cast<int64_t>(operand_stack_.size()));
         fmt::print("STACK_LENGTH, offset = {}, size = {}\n", offset, operand_stack_.size());
-        
+
         goto *(pc++)->label_addr;
     }
-    
+
     L_RETURN: {
         fmt::print("RETURN\n");
         // Clean up stack frame: [return_address][func_obj][local_0]...[local_nlocals-1]
 
         // Restore return address (raw).
         Cell return_cell = pop_return();
-        
+
         // Pop the func_obj pointer (raw) and restore previous function context.
         Cell * func_obj = static_cast<Cell *>(pop_return().ptr);
 
@@ -476,15 +481,15 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
 
         pc = static_cast<Cell*>(return_cell.ptr);
         current_function_ = func_obj;
-        
+
         // Continue execution at return address.
         goto *pc++->label_addr;
     }
-    
+
     L_HALT:
         fmt::print("HALT\n");
         return;
-    
+
     #else
     throw std::runtime_error("Threaded interpreter requires GCC/Clang");
     #endif
@@ -502,16 +507,18 @@ Cell * Machine::LaunchInstruction(Cell *pc)
     Cell *func_obj = static_cast<Cell *>((pc++)->ptr);
 
     // Display the structure of the function object for debugging.
+    #ifdef DEBUG2
     fmt::print("Length of instructions: {}\n", as_detagged_int(func_obj[-2]));
     fmt::print("T-block length: {}\n", as_detagged_int(func_obj[-1]));
-    fmt::print("FunctionDataKey: {}\n", static_cast<void*>(func_obj[0].ptr));  
+    fmt::print("FunctionDataKey: {}\n", static_cast<void*>(func_obj[0].ptr));
     fmt::print("NLocals: {}\n", heap_.get_function_nlocals(func_obj));
     fmt::print("NParams: {}\n", heap_.get_function_nparams(func_obj));
     for (int i = 0; i < as_detagged_int(func_obj[-2]); i++) {
         Cell instr = heap_.get_function_code(func_obj)[i];
         fmt::print("Instruction[{}]: label_addr={}\n", i, static_cast<void*>(instr.label_addr));
     }
-    
+    #endif
+
     // Set current function context.
     current_function_ = func_obj;
 
@@ -520,7 +527,7 @@ Cell * Machine::LaunchInstruction(Cell *pc)
     int nparams = heap_.get_function_nparams(func_obj);
 
     // Build stack frame: [return_address][func_obj][local_0]...[local_nlocals-1]
-    
+
     // Initialize remaining locals to nil.
     for (int i = nparams; i < nlocals; i++)
     {
@@ -547,10 +554,12 @@ Cell * Machine::LaunchInstruction(Cell *pc)
 
     // Set pc to function code (caller will do the goto).
     pc = heap_.get_function_code(func_obj);
+    #ifdef DEBUG1
     std::cerr << "LaunchInstruction: func_obj=" << func_obj << ", returned pc=" << pc << std::endl;
     if (pc == func_obj) {
         std::cerr << "ERROR: get_function_code returned func_obj itself!" << std::endl;
     }
+    #endif
     return pc;
 }
 
