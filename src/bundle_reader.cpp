@@ -85,7 +85,23 @@ Binding BundleReader::get_binding(const std::string& idname) {
 }
 
 std::vector<std::string> BundleReader::get_dependencies(const std::string& idname) {
+    std::unordered_map<std::string, bool> seen;
     std::vector<std::string> dependencies;
+    get_dependencies_recursive(idname, seen, dependencies);
+    return dependencies;
+}
+
+void BundleReader::get_dependencies_recursive(
+    const std::string& idname,
+    std::unordered_map<std::string, bool>& seen,
+    std::vector<std::string>& dependencies) {
+
+    // If we've already processed this dependency, skip it (prevents cycles).
+    if (seen[idname]) {
+        return;
+    }
+    seen[idname] = true;
+
     sqlite3_stmt* stmt = nullptr;
 
     const char* sql = "SELECT needs FROM depends_ons WHERE id_name = ?";
@@ -95,17 +111,25 @@ std::vector<std::string> BundleReader::get_dependencies(const std::string& idnam
     result = sqlite3_bind_text(stmt, 1, idname.c_str(), -1, SQLITE_TRANSIENT);
     check_sqlite_result(result, "Failed to bind parameter");
 
+    std::vector<std::string> direct_deps;
     while ((result = sqlite3_step(stmt)) == SQLITE_ROW) {
         const unsigned char* needs = sqlite3_column_text(stmt, 0);
         if (needs) {
-            dependencies.emplace_back(reinterpret_cast<const char*>(needs));
+            direct_deps.emplace_back(reinterpret_cast<const char*>(needs));
         }
     }
 
     check_sqlite_result(result, "Failed to execute DependsOn query");
     sqlite3_finalize(stmt);
 
-    return dependencies;
+    // Recursively process each direct dependency.
+    for (const auto& dep : direct_deps) {
+        // Add to result if not already seen.
+        if (!seen[dep]) {
+            dependencies.push_back(dep);
+            get_dependencies_recursive(dep, seen, dependencies);
+        }
+    }
 }
 
 
