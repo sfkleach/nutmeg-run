@@ -8,7 +8,7 @@
 #include "machine.hpp"
 #include "heap.hpp"
 
-#define DEBUG1
+// #define TRACE_MAIN
 
 struct CommandLineArgs {
     std::optional<std::string> entry_point;
@@ -114,26 +114,41 @@ int main(int argc, char* argv[]) {
         nutmeg::Machine machine;
 
         // Load all bindings transitively from the entry point.
-        #ifdef DEBUG1
+        #ifdef TRACE_MAIN
         fmt::print("Loading entry point: {}\n", entry_point_name);
         #endif
         std::vector<std::string> deps = reader.get_dependencies(entry_point_name);
+        nutmeg::Cell undef = nutmeg::make_undef();
         for (const auto& idname : deps) {
+            // Each dependency should be declared as a global variable with an undefined value.
+            machine.define_global(idname, undef);
+            #ifdef TRACE_MAIN
+            fmt::print("  Found dependency: {}\n", idname);
+            #endif
+        }
+
+        for (const auto& idname : deps) {
+            #ifdef TRACE_MAIN
             fmt::print("  Dependency: {}\n", idname);
+            #endif
             nutmeg::Binding binding = reader.get_binding(idname);
             nutmeg::FunctionObject func = machine.parse_function_object(binding.value);
             nutmeg::Cell* func_obj = machine.allocate_function(func.code, func.nlocals, func.nparams);
             machine.define_global(idname, make_tagged_ptr(func_obj));
+            #ifdef TRACE_MAIN
             fmt::print("  Loaded func_object {}\n", static_cast<void*>(func_obj));
             fmt::print("  Recovering func object: {}\n", as_detagged_ptr(make_tagged_ptr(func_obj)));
+            #endif
         }
-        #ifdef DEBUG1
+        #ifdef TRACE_MAIN
         fmt::print("All dependencies loaded.\n");
         #endif
 
         // Get the entry point function and execute it.
         nutmeg::Cell* entry_func_ptr = machine.get_global_cell_ptr(entry_point_name);
+        #ifdef TRACE_MAIN
         fmt::print("Recovered func_object {}\n", static_cast<void*>(entry_func_ptr));
+        #endif
         machine.execute(entry_func_ptr);
 
         return 0;
