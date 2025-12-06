@@ -33,6 +33,13 @@ private:
     // Helper to execute queries and handle errors.
     void check_sqlite_result(int result, const std::string& operation);
 
+    // Recursive helper for computing transitive dependencies.
+    // Tracks seen dependencies to prevent infinite loops from cycles.
+    void get_dependencies_recursive(
+        const std::string& idname,
+        std::unordered_map<std::string, bool>& seen,
+        std::vector<std::string>& dependencies);
+
 public:
     explicit BundleReader(const std::string& bundle_path);
     ~BundleReader();
