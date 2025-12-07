@@ -8,13 +8,16 @@ namespace nutmeg {
 
 // Instruction opcodes for threaded interpreter.
 enum class Opcode {
+    DONE,
     PUSH_INT,
     PUSH_STRING,
     POP_LOCAL,
     PUSH_LOCAL,
     PUSH_GLOBAL,
+    PUSH_GLOBAL_LAZY,
     LAUNCH,
     CALL_GLOBAL_COUNTED,
+    CALL_GLOBAL_COUNTED_LAZY,
     SYSCALL_COUNTED,
     STACK_LENGTH,
     RETURN,
@@ -22,7 +25,7 @@ enum class Opcode {
 };
 
 // Map JSON instruction type strings to opcodes.
-Opcode string_to_opcode(const std::string& type);
+std::pair<Opcode, Opcode> string_to_opcode(const std::string& type);
 
 // Get the instruction name for debugging.
 const char* opcode_to_string(Opcode opcode);
@@ -39,10 +42,10 @@ struct Instruction {
     // PUSH_INT, POP_LOCAL, PUSH_LOCAL.
     std::optional<int> index;
 
-    // PUSH_STRING, PUSH_GLOBAL.
+    // PUSH_STRING.
     std::optional<std::string> value;
 
-    // SYSCALL_COUNTED, CALL_GLOBAL_COUNTED.
+    // PUSH_GLOBAL, SYSCALL_COUNTED, CALL_GLOBAL_COUNTED.
     std::optional<std::string> name;
 };
 

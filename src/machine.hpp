@@ -11,6 +11,14 @@
 
 namespace nutmeg {
 
+class Ident {
+public:
+    Cell cell;
+    bool lazy = false;
+    bool in_progress = false;
+};
+
+
 // The virtual machine with dual-stack architecture.
 class Machine {
 private:
@@ -63,7 +71,7 @@ public:
     }
 
     // Global dictionary operations.
-    void define_global(const std::string& name, Cell value);
+    void define_global(const std::string& name, Cell value, bool lazy);
     Cell lookup_global(const std::string& name) const;
     bool has_global(const std::string& name) const;
     Cell* get_global_cell_ptr(const std::string& name);
@@ -92,6 +100,7 @@ private:
     // Combined init/run function for threaded interpreter (like Poppy).
     void threaded_impl(std::vector<Cell> *code, bool init_mode);
     Cell * LaunchInstruction(Cell *pc);
+    Cell * call_function_object(Cell * pc, Cell* func_ptr, int arg_count);
 }; // class Machine
 
 } // namespace nutmeg

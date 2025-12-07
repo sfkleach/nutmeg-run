@@ -141,56 +141,6 @@ inline bool is_nil(Cell cell) {
     return cell.u64 == SPECIAL_NIL;
 }
 
-class Ident {
-public:
-    Cell cell;
-};
-
-// // Indirection provides stable pointer to a value.
-// // Used for globals dictionary to avoid pointer invalidation during map resizing.
-// template<typename T>
-// class Indirection {
-// private:
-//     T* ptr_;
-
-// public:
-//     Indirection() : ptr_(new T()) {}
-//     explicit Indirection(const T& value) : ptr_(new T(value)) {}
-
-//     ~Indirection() {
-//         delete ptr_;
-//     }
-
-//     // Disable copy to ensure single ownership.
-//     Indirection(const Indirection&) = delete;
-//     Indirection& operator=(const Indirection&) = delete;
-
-//     // Enable move.
-//     Indirection(Indirection&& other) noexcept : ptr_(other.ptr_) {
-//         other.ptr_ = nullptr;
-//     }
-
-//     Indirection& operator=(Indirection&& other) noexcept {
-//         if (this != &other) {
-//             delete ptr_;
-//             ptr_ = other.ptr_;
-//             other.ptr_ = nullptr;
-//         }
-//         return *this;
-//     }
-
-//     // Get stable pointer to the value.
-//     T* get_ptr() { return ptr_; }
-//     const T* get_ptr() const { return ptr_; }
-
-//     // Dereference operators.
-//     T& operator*() { return *ptr_; }
-//     const T& operator*() const { return *ptr_; }
-
-//     T* operator->() { return ptr_; }
-//     const T* operator->() const { return ptr_; }
-// };
-
 // Helper for debugging: convert cell to string representation.
 std::string cell_to_string(Cell cell);
 
