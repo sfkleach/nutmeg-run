@@ -5,7 +5,7 @@ tests := build-dir + "/tests"
 
 [private]
 default:
-    @just ---list
+    @just --list
 
 # Build the project (Debug)
 build:
