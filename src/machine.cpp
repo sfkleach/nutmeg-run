@@ -644,7 +644,26 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
         goto *(pc++)->label_addr;
     }
 
-    L_CALL_GLOBAL_COUNTED_LAZY:
+    L_CALL_GLOBAL_COUNTED_LAZY: {
+        #ifdef DEBUG_INSTRUCTIONS
+        fmt::print("L_CALL_GLOBAL_COUNTED_LAZY\n");
+        #endif
+        Cell * self = pc - 1;
+        int64_t offset = (pc++)->i64;
+        Ident* ident_ptr = static_cast<Ident*>((pc++)->ptr);
+        if (ident_ptr->lazy) {
+            // Skip the check that any parameters are being passed. Will be zero.
+            // This sets the PC to the first instruction of the function object.
+            pc = call_function_object(pc, get_function_ptr(ident_ptr->cell), 0);
+        } else {
+            // Second time around it replaces the instruction with non-lazy version
+            // and repeats the instruction!
+            self->ptr = &&L_CALL_GLOBAL_COUNTED;
+            pc = self;
+        }
+        goto *(pc++)->label_addr;
+    }
+
     L_CALL_GLOBAL_COUNTED: {
         #ifdef DEBUG_INSTRUCTIONS
         fmt::print("CALL_GLOBAL_COUNTED\n");
