@@ -132,6 +132,26 @@ public:
         // We can identify them by checking if the datakey at offset 0 matches.
         return cell_ptr[0].ptr == function_datakey_;
     }
+
+    inline bool is_function_value(Cell cell) {
+        if (!is_tagged_ptr(cell)) {
+            return false;
+        }
+        Cell* obj_ptr = static_cast<Cell*>(as_detagged_ptr(cell));
+        return is_function_object(obj_ptr);
+    }
+
+    inline void must_be_function_object(Cell* cell_ptr) {
+        if (!is_function_object(cell_ptr)) {
+            throw std::runtime_error("Expected function object in heap (datakey mismatch)");
+        }
+    }
+
+    inline void must_be_function_value(Cell cell) {
+        if (!is_function_value(cell)) {
+            throw std::runtime_error("Expected function object value (not a tagged pointer or datakey mismatch)");
+        }
+    }
 };
 
 } // namespace nutmeg

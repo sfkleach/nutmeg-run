@@ -614,6 +614,10 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
         ident_ptr->cell = peek();
         ident_ptr->in_progress = false;
         ident_ptr->lazy = false;
+        
+        // Verify the value is now a function pointer.
+        heap_.must_be_function_value(ident_ptr->cell);
+        
         goto *(pc++)->label_addr;
     }
 
