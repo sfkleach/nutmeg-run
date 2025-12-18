@@ -7,6 +7,7 @@ namespace nutmeg {
 // Mapping from JSON instruction names to opcodes.
 static const std::unordered_map<std::string, std::pair<Opcode, Opcode>> string_to_opcode_map = {
     {"push.int", {Opcode::PUSH_INT, Opcode::PUSH_INT}},
+    {"push.bool", {Opcode::PUSH_BOOL, Opcode::PUSH_BOOL}},
     {"push.string", {Opcode::PUSH_STRING, Opcode::PUSH_STRING}},
     {"pop.local", {Opcode::POP_LOCAL, Opcode::POP_LOCAL}},
     {"push.local", {Opcode::PUSH_LOCAL, Opcode::PUSH_LOCAL}},
@@ -30,6 +31,7 @@ std::pair<Opcode, Opcode> string_to_opcode(const std::string& type) {
 const char* opcode_to_string(Opcode opcode) {
     switch (opcode) {
         case Opcode::PUSH_INT: return "PUSH_INT";
+        case Opcode::PUSH_BOOL: return "PUSH_BOOL";
         case Opcode::PUSH_STRING: return "PUSH_STRING";
         case Opcode::POP_LOCAL: return "POP_LOCAL";
         case Opcode::PUSH_LOCAL: return "PUSH_LOCAL";

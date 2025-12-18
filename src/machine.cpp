@@ -338,10 +338,24 @@ FunctionObject Machine::parse_function_object(const std::string& idname, const s
                 break;
             }
 
-            case Opcode::POP_LOCAL:
-            case Opcode::PUSH_LOCAL: {
-                Cell operand;
-                operand.i64 = inst.calc_offset();
+            case Opcode::PUSH_BOOL: {
+                if (!inst.value.has_value()) {
+                    throw std::runtime_error("PUSH_BOOL requires a value field");
+                }
+                std::string bool_str = inst.value.value();
+                bool bool_value;
+                if (bool_str == "true") {
+                    bool_value = true;
+                } else if (bool_str == "false") {
+                    bool_value = false;
+                } else {
+                    throw std::runtime_error("PUSH_BOOL value must be 'true' or 'false'");
+                }
+                #ifdef TRACE_PLANT_INSTRUCTIONS
+                fmt::print("Plant: PUSH_BOOL {}\n", bool_value);
+                #endif
+
+                Cell operand = make_bool(bool_value);
                 func.code.push_back(operand);
                 break;
             }
@@ -354,6 +368,17 @@ FunctionObject Machine::parse_function_object(const std::string& idname, const s
                 std::string str_value = inst.value.value();
                 Cell str_cell = allocate_string(str_value);
                 func.code.push_back(str_cell);
+                break;
+            }
+
+            case Opcode::POP_LOCAL: {
+                throw std::runtime_error("POP_LOCAL not yet implemented");
+            }
+
+            case Opcode::PUSH_LOCAL: {
+                Cell operand;
+                operand.i64 = inst.calc_offset();
+                func.code.push_back(operand);
                 break;
             }
 
@@ -555,8 +580,9 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
         fmt::print("In init mode, capturing labels\n");
         #endif
         opcode_map_ = {
-            {Opcode::PUSH_INT, &&L_PUSH_INT},
-            {Opcode::PUSH_STRING, &&L_PUSH_STRING},
+            {Opcode::PUSH_INT, &&L_PUSH_VALUE},
+            {Opcode::PUSH_BOOL, &&L_PUSH_VALUE},
+            {Opcode::PUSH_STRING, &&L_PUSH_VALUE},
             {Opcode::POP_LOCAL, &&L_POP_LOCAL},
             {Opcode::PUSH_LOCAL, &&L_PUSH_LOCAL},
             {Opcode::PUSH_GLOBAL, &&L_PUSH_GLOBAL},
@@ -588,21 +614,12 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
     #endif
     goto *pc++->label_addr;
 
-    L_PUSH_INT: {
+    L_PUSH_VALUE: {
         Cell value = *pc++;
         #ifdef DEBUG_INSTRUCTIONS
-        fmt::print("PUSH_INT {}\n", cell_to_string(value));
+        fmt::print("PUSH_VALUE {}\n", cell_to_string(value));
         #endif
         push(value);
-        goto *(pc++)->label_addr;
-    }
-
-    L_PUSH_STRING: {
-        #ifdef DEBUG_INSTRUCTIONS
-        fmt::print("PUSH_STRING\n");
-        #endif
-        Cell str_cell = *(pc++);
-        push(str_cell);
         goto *(pc++)->label_addr;
     }
 

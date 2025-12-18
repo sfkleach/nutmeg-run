@@ -12,6 +12,7 @@ enum class Opcode {
     DONE,
     PUSH_INT,
     PUSH_STRING,
+    PUSH_BOOL,
     POP_LOCAL,
     PUSH_LOCAL,
     PUSH_GLOBAL,
@@ -46,7 +47,7 @@ struct Instruction {
     // PUSH_INT.
     std::optional<int64_t> ivalue;
 
-    // PUSH_STRING.
+    // PUSH_STRING, PUSH_BOOL
     std::optional<std::string> value;
 
     // PUSH_GLOBAL, SYSCALL_COUNTED, CALL_GLOBAL_COUNTED.
