@@ -52,8 +52,8 @@ public:
     void push(Cell value);
     Cell pop();
     void pop_multiple(size_t count);
-    Cell peek() const;
-    Cell peek_at(size_t index) const;
+    Cell& peek();
+    Cell& peek_at(size_t index);
     bool empty() const;
     size_t stack_size() const;
 
@@ -86,7 +86,7 @@ public:
     Cell* get_function_ptr(Cell cell);
 
     // Parse JSON function object and compile to threaded code.
-    FunctionObject parse_function_object(const std::string& json_str);
+    FunctionObject parse_function_object(const std::string& idname, const std::unordered_map<std::string, bool>& deps, const std::string& json_str);
 
     // Get the heap for external use (e.g., initializing globals).
     Heap& get_heap() { return heap_; }

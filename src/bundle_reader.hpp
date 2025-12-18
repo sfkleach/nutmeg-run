@@ -37,8 +37,7 @@ private:
     // Tracks seen dependencies to prevent infinite loops from cycles.
     void get_dependencies_recursive(
         const std::string& idname,
-        std::unordered_map<std::string, bool>& seen,
-        std::vector<std::string>& dependencies);
+        std::unordered_map<std::string, bool>& dependencies);
 
 public:
     explicit BundleReader(const std::string& bundle_path);
@@ -55,7 +54,8 @@ public:
     Binding get_binding(const std::string& idname);
 
     // Get dependencies for a given IdName.
-    std::vector<std::string> get_dependencies(const std::string& idname);
+    // Returns a map where the key is the dependency name and the value is true if lazy, false otherwise.
+    std::unordered_map<std::string, bool> get_dependencies(const std::string& idname);
 };
 
 } // namespace nutmeg

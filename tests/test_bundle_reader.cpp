@@ -27,7 +27,7 @@ TEST_CASE("Machine can parse function object JSON", "[bundle_reader]") {
         ]
     })";
     
-    FunctionObject func = machine.parse_function_object(json);
+    FunctionObject func = machine.parse_function_object("test", {}, json);
     
     REQUIRE(func.nlocals == 2);
     REQUIRE(func.nparams == 1);

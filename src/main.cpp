@@ -117,24 +117,24 @@ int main(int argc, char* argv[]) {
         #ifdef TRACE_MAIN
         fmt::print("Loading entry point: {}\n", entry_point_name);
         #endif
-        std::vector<std::string> deps = reader.get_dependencies(entry_point_name);
+        std::unordered_map<std::string, bool> deps = reader.get_dependencies(entry_point_name);
         nutmeg::Cell undef = nutmeg::make_undef();
-        for (const auto& idname : deps) {
+        for (const auto& id_lazy : deps) {
             // Each dependency should be declared as a global variable with an undefined value.
-            machine.define_global(idname, undef, false);
+            machine.define_global(id_lazy.first, undef, false);
             #ifdef TRACE_MAIN
-            fmt::print("  Found dependency: {}\n", idname);
+            fmt::print("  Found dependency: {}\n", id_lazy.first);
             #endif
         }
 
-        for (const auto& idname : deps) {
+        for (const auto& id_lazy : deps) {
             #ifdef TRACE_MAIN
-            fmt::print("  Dependency: {}\n", idname);
+            fmt::print("  Dependency: {}\n", id_lazy.first);
             #endif
-            nutmeg::Binding binding = reader.get_binding(idname);
-            nutmeg::FunctionObject func = machine.parse_function_object(binding.value);
+            nutmeg::Binding binding = reader.get_binding(id_lazy.first);
+            nutmeg::FunctionObject func = machine.parse_function_object(id_lazy.first, deps, binding.value);
             nutmeg::Cell* func_obj = machine.allocate_function(func.code, func.nlocals, func.nparams);
-            machine.define_global(idname, make_tagged_ptr(func_obj), binding.lazy);
+            machine.define_global(id_lazy.first, make_tagged_ptr(func_obj), binding.lazy);
             #ifdef TRACE_MAIN
             fmt::print("  Loaded func_object {}\n", static_cast<void*>(func_obj));
             fmt::print("  Recovering func object: {}\n", as_detagged_ptr(make_tagged_ptr(func_obj)));

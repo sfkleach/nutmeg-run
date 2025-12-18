@@ -84,26 +84,30 @@ Binding BundleReader::get_binding(const std::string& idname) {
     return binding;
 }
 
-std::vector<std::string> BundleReader::get_dependencies(const std::string& idname) {
-    std::unordered_map<std::string, bool> seen;
-    std::vector<std::string> dependencies;
-    get_dependencies_recursive(idname, seen, dependencies);
+std::unordered_map<std::string, bool> BundleReader::get_dependencies(const std::string& idname) {
+    std::unordered_map<std::string, bool> dependencies;
+    get_dependencies_recursive(idname, dependencies);
+
+    fmt::print("Dependencies for '{}' [\n", idname);
+    for (const auto& [dep, is_lazy] : dependencies) {
+        fmt::print("  {} (lazy: {})\n", dep, is_lazy);
+    }
+    fmt::print("]   \n");
     return dependencies;
 }
 
 void BundleReader::get_dependencies_recursive(
     const std::string& idname,
-    std::unordered_map<std::string, bool>& seen,
-    std::vector<std::string>& dependencies) {
+    std::unordered_map<std::string, bool>& dependencies) {
 
     // If we've already processed this dependency, skip it (prevents cycles).
-    if (seen[idname]) {
+    if (dependencies.count(idname)) {
         return;
     }
-    seen[idname] = true;
 
-    // Add the current id to the dependencies list.
-    dependencies.push_back(idname);
+    // Look up the binding to determine if it's lazy.
+    Binding binding = get_binding(idname);
+    dependencies[idname] = binding.lazy;
 
     sqlite3_stmt* stmt = nullptr;
 
@@ -127,11 +131,7 @@ void BundleReader::get_dependencies_recursive(
 
     // Recursively process each direct dependency.
     for (const auto& dep : direct_deps) {
-        // Add to result if not already seen.
-        if (!seen[dep]) {
-            dependencies.push_back(dep);
-            get_dependencies_recursive(dep, seen, dependencies);
-        }
+        get_dependencies_recursive(dep, dependencies);
     }
 }
 

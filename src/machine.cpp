@@ -8,9 +8,11 @@
 
 #define DEBUG_INSTRUCTIONS
 // #define DEBUG_INSTRUCTIONS_DETAIL
-// #define TRACE_PLANT_INSTRUCTIONS
+#define TRACE_PLANT_INSTRUCTIONS
 // #define TRACE_CODEGEN
 // #define TRACE_CODEGEN_DETAILED
+#define EXTRA_CHECKS
+#define TRACE_EXECUTION
 
 namespace nutmeg {
 
@@ -48,14 +50,14 @@ void Machine::pop_multiple(size_t count) {
     operand_stack_.resize(operand_stack_.size() - count);
 }
 
-Cell Machine::peek() const {
+Cell& Machine::peek() {
     if (operand_stack_.empty()) {
         throw std::runtime_error("Stack is empty");
     }
     return operand_stack_.back();
 }
 
-Cell Machine::peek_at(size_t index) const {
+Cell& Machine::peek_at(size_t index) {
     if (index >= operand_stack_.size()) {
         throw std::runtime_error("Stack index out of bounds");
     }
@@ -252,7 +254,10 @@ void Machine::execute_syscall(const std::string& name, int nargs) {
     }
 }
 
-FunctionObject Machine::parse_function_object(const std::string& json_str) {
+FunctionObject Machine::parse_function_object(const std::string& idname, const std::unordered_map<std::string, bool>& deps, const std::string& json_str) {
+    #ifdef TRACE_PLANT_INSTRUCTIONS
+    fmt::print("Planting instructions for function: {}\n", idname);
+    #endif
     try {
         nlohmann::json j = nlohmann::json::parse(json_str);
 
@@ -262,10 +267,29 @@ FunctionObject Machine::parse_function_object(const std::string& json_str) {
 
         // Compile instructions to threaded code.
         for (const auto& inst_json : j.at("instructions")) {
+
+            fmt::print("Processing instruction JSON: {}\n", inst_json.dump());
+
             Instruction inst;
             inst.type = inst_json.at("type").get<std::string>();
+            if (inst_json.contains("name")) {
+                inst.name = inst_json.at("name").get<std::string>();
+            }
             auto opcodes = string_to_opcode(inst.type);
-            inst.opcode = opcodes.second;  // Normal opcode
+
+            bool is_lazy = false;
+            if (inst.name.has_value()) {
+                auto dep_it = deps.find(inst.name.value());
+                if (dep_it != deps.end()) {
+                    is_lazy = dep_it->second;
+                }
+                fmt::print("Instruction '{}' refers to global '{}', lazy={}\n",
+                           inst.type, inst.name.value(), is_lazy);
+            } else {
+                fmt::print("Instruction '{}' has no global name\n", inst.type);
+            }
+            inst.opcode = is_lazy ? opcodes.second : opcodes.first;
+
             #ifdef TRACE_CODEGEN_DETAILED
             fmt::print("  Parsing instruction: {} of type {}\n", inst.type, static_cast<int>(inst.opcode));
             #endif
@@ -281,8 +305,8 @@ FunctionObject Machine::parse_function_object(const std::string& json_str) {
             if (inst_json.contains("value")) {
                 inst.value = inst_json.at("value").get<std::string>();
             }
-            if (inst_json.contains("name")) {
-                inst.name = inst_json.at("name").get<std::string>();
+            if (inst_json.contains("ivalue")) {
+                inst.ivalue = inst_json.at("ivalue").get<int64_t>();
             }
 
             // Compile to threaded code: emit label address followed by operands.
@@ -298,12 +322,26 @@ FunctionObject Machine::parse_function_object(const std::string& json_str) {
             #endif
 
             // Add immediate operands based on instruction type.
+            fmt::print("Processing operands for instruction: {}\n", opcode_to_string(inst.opcode));
             switch (inst.opcode) {
-            case Opcode::PUSH_INT:
+            case Opcode::PUSH_INT: {
+                if (!inst.ivalue.has_value()) {
+                    throw std::runtime_error("PUSH_INT requires an ivalue field");
+                }
+                int64_t int_value = inst.ivalue.value();
+                #ifdef TRACE_PLANT_INSTRUCTIONS
+                fmt::print("Plant: PUSH_INT {}\n", int_value);
+                #endif
+
+                Cell operand = make_tagged_int(int_value);
+                func.code.push_back(operand);
+                break;
+            }
+
             case Opcode::POP_LOCAL:
             case Opcode::PUSH_LOCAL: {
                 Cell operand;
-                operand.i64 = inst.index.value_or(0);
+                operand.i64 = inst.calc_offset();
                 func.code.push_back(operand);
                 break;
             }
@@ -345,7 +383,7 @@ FunctionObject Machine::parse_function_object(const std::string& json_str) {
             case Opcode::CALL_GLOBAL_COUNTED_LAZY:
             case Opcode::CALL_GLOBAL_COUNTED: {
                 #ifdef TRACE_PLANT_INSTRUCTIONS
-                fmt::print("Plant: CALL_GLOBAL_COUNTED\n");
+                fmt::print("Plant: (L_)CALL_GLOBAL_COUNTED\n");
                 #endif
                 // CALL_GLOBAL has two arguments:
                 // * index = the local variable index to get the previous stack length from, and
@@ -370,7 +408,7 @@ FunctionObject Machine::parse_function_object(const std::string& json_str) {
                 #endif
 
                 // Generate the index operand as a raw offset.
-                Cell index_operand = make_raw_i64(inst.index.value() + 3);
+                Cell index_operand = make_raw_i64(inst.calc_offset());
                 func.code.push_back(index_operand);
                 #ifdef TRACE_PLANT_INSTRUCTIONS_DETAILED
                 fmt::print("    Pushed index operand: {}\n", index_operand.i64);
@@ -401,7 +439,7 @@ FunctionObject Machine::parse_function_object(const std::string& json_str) {
                 fmt::print("  SYSCALL_COUNTED compiling with index={} name={}\n", inst.index.value(), inst.name.value());
                 #endif
                 // L_SYSCALL_COUNTED requires two operands: the index and the sys-function pointer.
-                Cell index_operand = make_raw_i64(inst.index.value() + 3);
+                Cell index_operand = make_raw_i64(inst.calc_offset());
                 func.code.push_back(index_operand);
 
                 // Look up sys-function in the table.
@@ -426,7 +464,7 @@ FunctionObject Machine::parse_function_object(const std::string& json_str) {
                  if (!inst.index.has_value()) {
                     throw std::runtime_error("STACK_LENGTH requires an index field");
                 }
-               int offset = inst.index.value() + 3; // +3 for return address and func_obj and 0-based.
+                int offset = inst.calc_offset();
                 Cell c = make_raw_i64(offset);
                 func.code.push_back(c);
                 break;
@@ -454,7 +492,7 @@ FunctionObject Machine::parse_function_object(const std::string& json_str) {
                 }
 
                 // Generate the index operand as a raw offset.
-                Cell index_operand = make_raw_i64(inst.index.value() + 3);
+                Cell index_operand = make_raw_i64(inst.calc_offset());
                 func.code.push_back(index_operand);
                 #ifdef TRACE_PLANT_INSTRUCTIONS_DETAILED
                 fmt::print("    Pushed index operand: {}\n", index_operand.i64);
@@ -477,10 +515,15 @@ FunctionObject Machine::parse_function_object(const std::string& json_str) {
         halt_word.label_addr = opcode_map_.at(Opcode::HALT);
         func.code.push_back(halt_word);
 
+        #ifdef TRACE_PLANT_INSTRUCTIONS
+        fmt::print("End of instructions for function: {}\n", idname);
+        #endif
+        
         return func;
     } catch (const nlohmann::json::exception& e) {
         throw std::runtime_error(fmt::format("JSON parsing error: {}", e.what()));
     }
+
 }
 
 
@@ -546,11 +589,11 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
     goto *pc++->label_addr;
 
     L_PUSH_INT: {
+        Cell value = *pc++;
         #ifdef DEBUG_INSTRUCTIONS
-        fmt::print("PUSH_INT\n");
+        fmt::print("PUSH_INT {}\n", cell_to_string(value));
         #endif
-        int64_t value = (pc++)->i64;
-        push(make_tagged_int(value));
+        push(value);
         goto *(pc++)->label_addr;
     }
 
@@ -564,6 +607,9 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
     }
 
     L_POP_LOCAL: {
+        #ifdef DEBUG_INSTRUCTIONS
+        fmt::print("POP_LOCAL\n");
+        #endif
     //     #ifdef DEBUG_INSTRUCTIONS
     //     fmt::print("POP_LOCAL\n");
     //     #endif
@@ -572,17 +618,16 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
     //     int nlocals = heap_.get_function_nlocals(current_function_);
     //     size_t offset = return_stack_.size() - nlocals + idx;
     //     return_stack_[offset] = value;
+        throw std::runtime_error("POP_LOCAL not implemented yet");
         goto *(pc++)->label_addr;
     }
 
     L_PUSH_LOCAL: {
-    //     #ifdef DEBUG_INSTRUCTIONS
-    //     fmt::print("PUSH_LOCAL\n");
-    //     #endif
-    //     int64_t idx = (pc++)->i64;
-    //     int nlocals = heap_.get_function_nlocals(current_function_);
-    //     size_t offset = return_stack_.size() - nlocals + idx;
-    //     push(return_stack_[offset]);
+        int offset = (pc++)->i64;
+        #ifdef DEBUG_INSTRUCTIONS
+        fmt::print("PUSH_LOCAL #{}\n", offset);
+        #endif
+        operand_stack_.push_back(get_local_variable(offset));
         goto *(pc++)->label_addr;
     }
 
@@ -614,7 +659,7 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
         ident_ptr->cell = peek();
         ident_ptr->in_progress = false;
         ident_ptr->lazy = false;
-        
+
         // Verify the value is now a function pointer.
         heap_.must_be_function_value(ident_ptr->cell);
         
@@ -681,9 +726,21 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
         Ident* ident_ptr = static_cast<Ident*>((pc++)->ptr);
         Cell* func_ptr = get_function_ptr(ident_ptr->cell);
 
+        #ifdef EXTRA_CHECKS
+        if (!heap_.is_function_object(func_ptr)) {
+            throw std::runtime_error("Attempt to call a non-function object");
+        } else {
+            fmt::print("Verified function object\n");
+        }
+        #endif
+
         // Get the number of nlocals and nparams from the function object.
         int nlocals = heap_.get_function_nlocals(func_ptr);
         int nparams = heap_.get_function_nparams(func_ptr);
+
+        #ifdef TRACE_EXECUTION
+        fmt::print("CALL_GLOBAL_COUNTED: nparams = {}, nlocals = {}, arg_count = {}\n", nparams, nlocals, count);
+        #endif
 
         // Build stack frame: [return_address][func_obj][local_0]...[local_nlocals-1]
         // Initialize remaining locals to nil.
@@ -696,7 +753,9 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
         // Operand stack has params in reverse order, so popping gives us the right order.
         for (int i = 0; i < nparams; i++)
         {
-            push_return(pop());
+            Cell c = pop();
+            fmt::print("Popping param {} = {}\n", i, cell_to_string(c));
+            push_return(c);
         }
 
         // Save func_obj pointer so RETURN can read nlocals.
@@ -716,13 +775,12 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
     }
 
     L_SYSCALL_COUNTED: {
-        #ifdef DEBUG_INSTRUCTIONS
         int64_t offset = (pc++)->i64;
-        fmt::print("SYSCALL_COUNTED, offset={}, value={}\n", offset, get_local_variable(offset).i64);
-        #else
-        int64_t offset = (pc++)->i64;
-        #endif
+        auto value = as_detagged_int(get_local_variable(offset));
         uint64_t count = operand_stack_.size() - as_detagged_int(get_local_variable(offset));
+        #ifdef DEBUG_INSTRUCTIONS
+        fmt::print("SYSCALL_COUNTED, offset={}, value={}, stack_size={}, count={}\n", offset, value, operand_stack_.size(), count);
+        #endif
         SysFunction sys_function = reinterpret_cast<SysFunction>((pc++)->ptr);
         sys_function(*this, static_cast<int>(count));
 

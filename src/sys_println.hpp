@@ -1,7 +1,7 @@
 #include <cstdint>
 
-#ifndef SYSPRINTLN_HPP
-#define SYSPRINTLN_HPP
+#ifndef SYS_PRINTLN_HPP
+#define SYS_PRINTLN_HPP
 
 
 
@@ -14,4 +14,4 @@ void sys_println(Machine& machine, uint64_t nargs);
 
 } // namespace nutmeg
 
-#endif // SYSPRINTLN_HPP
+#endif // SYS_PRINTLN_HPP

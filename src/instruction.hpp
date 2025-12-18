@@ -3,6 +3,7 @@
 
 #include <string>
 #include <optional>
+#include <stdexcept>
 
 namespace nutmeg {
 
@@ -39,14 +40,24 @@ struct Instruction {
     // Fields for different instruction types.
     // Only the relevant fields for each type will be populated.
 
-    // PUSH_INT, POP_LOCAL, PUSH_LOCAL.
+    // POP_LOCAL, PUSH_LOCAL.
     std::optional<int> index;
+
+    // PUSH_INT.
+    std::optional<int64_t> ivalue;
 
     // PUSH_STRING.
     std::optional<std::string> value;
 
     // PUSH_GLOBAL, SYSCALL_COUNTED, CALL_GLOBAL_COUNTED.
     std::optional<std::string> name;
+
+    int calc_offset() const {
+        if (index.has_value()) {
+            return index.value() + 3;  // Adjust for tagged int representation.
+        }
+        throw std::runtime_error("calc_offset called on instruction without index");
+    }
 };
 
 } // namespace nutmeg
