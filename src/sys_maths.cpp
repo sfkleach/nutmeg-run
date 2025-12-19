@@ -8,6 +8,58 @@
 
 namespace nutmeg {
 
+// Helper template for binary operations.
+// Takes an operation function, operation name, and operation symbol.
+// Using templates allows the compiler to inline the operation for optimal performance.
+template<typename Op>
+static void binary_cell_operation(
+    Machine& machine,
+    uint64_t nargs,
+    Op operation,
+    const char* op_name,
+    const char* op_symbol) {
+    
+    // GUARD: Ensure nargs is 2.
+    if (nargs != 2) {
+        throw std::runtime_error(fmt::format("{} ({}): nargs must be 2.", op_name, op_symbol));
+    }
+
+    // BODY
+    Cell n = machine.pop();
+    Cell m = machine.peek();
+
+    #ifdef DEBUG
+    fmt::print("{}: operating on {} and {}\n", op_name, cell_to_string(m), cell_to_string(n));
+    #endif
+
+    Cell result = operation(m, n);
+
+    #ifdef DEBUG
+    fmt::print("{}: {} {} {} = {}\n", op_name, cell_to_string(m), op_symbol, cell_to_string(n), cell_to_string(result));
+    #endif
+
+    machine.peek() = result;
+
+    #ifdef DEBUG
+    fmt::print("stack after {}: size = {}\n", op_name, machine.stack_size());
+    for (size_t idx = 0; idx < machine.stack_size(); idx++) {
+        fmt::print("  [{}]: {}\n", idx, cell_to_string(machine.peek_at(idx)));
+    }
+    #endif
+}
+
+void sys_identical(Machine& machine, uint64_t nargs) {
+    binary_cell_operation(machine, nargs, [](Cell a, Cell b) {
+        return (a.u64 == b.u64) ? SPECIAL_TRUE : SPECIAL_FALSE;
+    }, "identical", "===");
+}
+
+void sys_not_identical(Machine& machine, uint64_t nargs) {
+    binary_cell_operation(machine, nargs, [](Cell a, Cell b) {
+        return (a.u64 != b.u64) ? SPECIAL_TRUE : SPECIAL_FALSE;
+    }, "not_identical", "!==");
+}
+
 // Helper template for binary integer operations.
 // Takes an operation function, operation name, and operation symbol.
 // Using templates allows the compiler to inline the operation for optimal performance.
@@ -88,17 +140,7 @@ void sys_greater_than(Machine& machine, uint64_t nargs) {
     }, "greater_than", ">");
 }
 
-void sys_equal(Machine& machine, uint64_t nargs) {
-    binary_int_operation(machine, nargs, [](int64_t a, int64_t b) {
-        return (a == b) ? SPECIAL_TRUE : SPECIAL_FALSE;
-    }, "equal", "==");
-}
 
-void sys_not_equal(Machine& machine, uint64_t nargs) {
-    binary_int_operation(machine, nargs, [](int64_t a, int64_t b) {
-        return (a != b) ? SPECIAL_TRUE : SPECIAL_FALSE;
-    }, "not_equal", "!=");
-}
 
 void sys_less_than_or_equal_to(Machine& machine, uint64_t nargs) {
     binary_int_operation(machine, nargs, [](int64_t a, int64_t b) {

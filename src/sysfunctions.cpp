@@ -15,8 +15,8 @@ const std::unordered_map<std::string, SysFunction> sysfunctions_table = {
     {"negate", sys_negate},
     {"<", sys_less_than},
     {">", sys_greater_than},
-    {"==", sys_equal},
-    {"!=", sys_not_equal},
+    {"===", sys_identical},
+    {"!==", sys_not_identical},
     {"<=", sys_less_than_or_equal_to},
     {">=", sys_greater_than_or_equal_to}
 };

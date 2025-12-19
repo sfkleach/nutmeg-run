@@ -495,6 +495,22 @@ FunctionObject Machine::parse_function_object(const std::string& idname, const s
                 break;
             }
 
+            case Opcode::CHECK_BOOL: {
+                // Check that the stack has grown by exactly 1 and that the
+                // top of stack is a boolean. Index refers to the local
+                // variable that holds the "before" stack length.
+                #ifdef TRACE_PLANT_INSTRUCTIONS
+                fmt::print("Plant: CHECK_BOOL\n");
+                #endif
+                if (!inst.index.has_value()) {
+                    throw std::runtime_error("CHECK_BOOL requires an index field");
+                }
+                int offset = inst.calc_offset();
+                Cell c = make_raw_i64(offset);
+                func.code.push_back(c);
+                break;
+            }
+
             case Opcode::RETURN:
             case Opcode::HALT: {
                 // No operands.
@@ -592,6 +608,7 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
             {Opcode::CALL_GLOBAL_COUNTED_LAZY, &&L_CALL_GLOBAL_COUNTED_LAZY},
             {Opcode::SYSCALL_COUNTED, &&L_SYSCALL_COUNTED},
             {Opcode::STACK_LENGTH, &&L_STACK_LENGTH},
+            {Opcode::CHECK_BOOL, &&L_CHECK_BOOL},
             {Opcode::RETURN, &&L_RETURN},
             {Opcode::HALT, &&L_HALT},
             {Opcode::DONE, &&L_DONE},
@@ -812,6 +829,34 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
         #ifdef DEBUG_INSTRUCTIONS
         fmt::print("STACK_LENGTH, offset = {}, size = {}\n", offset, operand_stack_.size());
         #endif
+
+        goto *(pc++)->label_addr;
+    }
+
+    L_CHECK_BOOL: {
+        // Verify that the stack has grown by exactly 1 since the "before"
+        // snapshot and that the top of stack is a boolean value.
+        int64_t offset = (pc++)->i64;
+        int64_t before_size = as_detagged_int(get_local_variable(offset));
+        int64_t current_size = static_cast<int64_t>(operand_stack_.size());
+        #ifdef DEBUG_INSTRUCTIONS
+        fmt::print("CHECK_BOOL, offset = {}, before = {}, current = {}\n", offset, before_size, current_size);
+        #endif
+
+        // Check that exactly one value was pushed.
+        if (current_size != before_size + 1) {
+            throw std::runtime_error(
+                fmt::format("CHECK_BOOL failed: expected stack size {}, got {}", before_size + 1, current_size)
+            );
+        }
+
+        // Check that the top of stack is a boolean.
+        Cell top = peek();
+        if (!is_bool(top)) {
+            throw std::runtime_error(
+                fmt::format("CHECK_BOOL failed: expected boolean, got {}", cell_to_string(top))
+            );
+        }
 
         goto *(pc++)->label_addr;
     }

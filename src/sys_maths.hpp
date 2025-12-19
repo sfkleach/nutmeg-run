@@ -9,6 +9,9 @@ namespace nutmeg {
 
 class Machine;
 
+void sys_identical(Machine& machine, uint64_t nargs);
+void sys_not_identical(Machine& machine, uint64_t nargs);
+
 // Sys-function implementations for arithmetic operations.
 void sys_add(Machine& machine, uint64_t nargs);
 void sys_subtract(Machine& machine, uint64_t nargs);
@@ -19,8 +22,6 @@ void sys_negate(Machine& machine, uint64_t nargs);
 
 void sys_less_than(Machine& machine, uint64_t nargs);
 void sys_greater_than(Machine& machine, uint64_t nargs);
-void sys_equal(Machine& machine, uint64_t nargs);
-void sys_not_equal(Machine& machine, uint64_t nargs);
 void sys_less_than_or_equal_to(Machine& machine, uint64_t nargs);
 void sys_greater_than_or_equal_to(Machine& machine, uint64_t nargs);
 

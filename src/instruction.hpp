@@ -22,6 +22,7 @@ enum class Opcode {
     CALL_GLOBAL_COUNTED_LAZY,
     SYSCALL_COUNTED,
     STACK_LENGTH,
+    CHECK_BOOL,
     RETURN,
     HALT,
 };

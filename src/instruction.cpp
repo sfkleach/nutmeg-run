@@ -15,6 +15,7 @@ static const std::unordered_map<std::string, std::pair<Opcode, Opcode>> string_t
     {"call.global.counted", {Opcode::CALL_GLOBAL_COUNTED, Opcode::CALL_GLOBAL_COUNTED_LAZY}},
     {"syscall.counted", {Opcode::SYSCALL_COUNTED, Opcode::SYSCALL_COUNTED}},
     {"stack.length", {Opcode::STACK_LENGTH, Opcode::STACK_LENGTH}},
+    {"check.bool", {Opcode::CHECK_BOOL, Opcode::CHECK_BOOL}},
     {"return", {Opcode::RETURN, Opcode::RETURN}},
     {"halt", {Opcode::HALT, Opcode::HALT}},
     {"done", {Opcode::DONE, Opcode::DONE}},
@@ -41,6 +42,7 @@ const char* opcode_to_string(Opcode opcode) {
         case Opcode::CALL_GLOBAL_COUNTED_LAZY: return "CALL_GLOBAL_COUNTED_LAZY";
         case Opcode::SYSCALL_COUNTED: return "SYSCALL_COUNTED";
         case Opcode::STACK_LENGTH: return "STACK_LENGTH";
+        case Opcode::CHECK_BOOL: return "CHECK_BOOL";
         case Opcode::RETURN: return "RETURN";
         case Opcode::HALT: return "HALT";
         case Opcode::DONE: return "DONE";
