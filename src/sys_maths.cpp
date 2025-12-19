@@ -38,13 +38,13 @@ static void binary_int_operation(
 
     int64_t i = as_detagged_int(m);
     int64_t j = as_detagged_int(n);
-    int64_t result = operation(i, j);
+    Cell result = operation(i, j);
 
     #ifdef DEBUG
-    fmt::print("{}: {} {} {} = {}\n", op_name, i, op_symbol, j, result);
+    fmt::print("{}: {} {} {} = {}\n", op_name, i, op_symbol, j, cell_to_string(result));
     #endif
 
-    machine.peek() = make_tagged_int(result);
+    machine.peek() = result;
 
     #ifdef DEBUG
     fmt::print("stack after {}: size = {}\n", op_name, machine.stack_size());
@@ -56,15 +56,15 @@ static void binary_int_operation(
 
 // Sys-function implementations for arithmetic operations.
 void sys_add(Machine& machine, uint64_t nargs) {
-    binary_int_operation(machine, nargs, [](int64_t a, int64_t b) { return a + b; }, "add", "+");
+    binary_int_operation(machine, nargs, [](int64_t a, int64_t b) { return make_tagged_int(a + b); }, "add", "+");
 }
 
 void sys_subtract(Machine& machine, uint64_t nargs) {
-    binary_int_operation(machine, nargs, [](int64_t a, int64_t b) { return a - b; }, "subtract", "-");
+    binary_int_operation(machine, nargs, [](int64_t a, int64_t b) { return make_tagged_int(a - b); }, "subtract", "-");
 }
 
 void sys_multiply(Machine& machine, uint64_t nargs) {
-    binary_int_operation(machine, nargs, [](int64_t a, int64_t b) { return a * b; }, "multiply", "*");
+    binary_int_operation(machine, nargs, [](int64_t a, int64_t b) { return make_tagged_int(a * b); }, "multiply", "*");
 }
 
 void sys_divide(Machine& machine, uint64_t nargs) {
@@ -72,8 +72,44 @@ void sys_divide(Machine& machine, uint64_t nargs) {
         if (b == 0) {
             throw std::runtime_error("divide (/): division by zero");
         }
-        return a / b;
+        return make_tagged_int(a / b);
     }, "divide", "/");
+}
+
+void sys_less_than(Machine& machine, uint64_t nargs) {
+    binary_int_operation(machine, nargs, [](int64_t a, int64_t b) {
+        return (a < b) ? SPECIAL_TRUE : SPECIAL_FALSE;
+    }, "less_than", "<");
+}
+
+void sys_greater_than(Machine& machine, uint64_t nargs) {
+    binary_int_operation(machine, nargs, [](int64_t a, int64_t b) {
+        return (a > b) ? SPECIAL_TRUE : SPECIAL_FALSE;
+    }, "greater_than", ">");
+}
+
+void sys_equal(Machine& machine, uint64_t nargs) {
+    binary_int_operation(machine, nargs, [](int64_t a, int64_t b) {
+        return (a == b) ? SPECIAL_TRUE : SPECIAL_FALSE;
+    }, "equal", "==");
+}
+
+void sys_not_equal(Machine& machine, uint64_t nargs) {
+    binary_int_operation(machine, nargs, [](int64_t a, int64_t b) {
+        return (a != b) ? SPECIAL_TRUE : SPECIAL_FALSE;
+    }, "not_equal", "!=");
+}
+
+void sys_less_than_or_equal_to(Machine& machine, uint64_t nargs) {
+    binary_int_operation(machine, nargs, [](int64_t a, int64_t b) {
+        return (a <= b) ? SPECIAL_TRUE : SPECIAL_FALSE;
+    }, "less_equal", "<=");
+}
+
+void sys_greater_than_or_equal_to(Machine& machine, uint64_t nargs) {
+    binary_int_operation(machine, nargs, [](int64_t a, int64_t b) {
+        return (a >= b) ? SPECIAL_TRUE : SPECIAL_FALSE;
+    }, "greater_equal", ">=");
 }
 
 

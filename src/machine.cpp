@@ -763,7 +763,7 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
         // Initialize remaining locals to nil.
         for (int i = nparams; i < nlocals; i++)
         {
-            push_return(make_nil());
+            push_return(SPECIAL_NIL);
         }
 
         // Pop parameters from operand stack and push to return stack.
@@ -883,7 +883,7 @@ inline Cell* Machine::call_function_object(Cell* pc, Cell* func_ptr, int arg_cou
     // Initialize remaining locals to nil.
     for (int i = nparams; i < nlocals; i++)
     {
-        push_return(make_nil());
+        push_return(SPECIAL_NIL);
     }
 
     // Pop parameters from operand stack and push to return stack.
@@ -942,7 +942,7 @@ Cell * Machine::LaunchInstruction(Cell *pc)
     // Initialize remaining locals to nil.
     for (int i = nparams; i < nlocals; i++)
     {
-        push_return(make_nil());
+        push_return(SPECIAL_NIL);
     }
 
     // Pop parameters from operand stack and push to return stack.

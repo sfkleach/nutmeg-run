@@ -13,6 +13,12 @@ const std::unordered_map<std::string, SysFunction> sysfunctions_table = {
     {"*", sys_multiply},
     {"/", sys_divide},
     {"negate", sys_negate},
+    {"<", sys_less_than},
+    {">", sys_greater_than},
+    {"==", sys_equal},
+    {"!=", sys_not_equal},
+    {"<=", sys_less_than_or_equal_to},
+    {">=", sys_greater_than_or_equal_to}
 };
 
 } // namespace nutmeg

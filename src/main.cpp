@@ -118,7 +118,7 @@ int main(int argc, char* argv[]) {
         fmt::print("Loading entry point: {}\n", entry_point_name);
         #endif
         std::unordered_map<std::string, bool> deps = reader.get_dependencies(entry_point_name);
-        nutmeg::Cell undef = nutmeg::make_undef();
+        nutmeg::Cell undef = nutmeg::SPECIAL_UNDEF;
         for (const auto& id_lazy : deps) {
             // Each dependency should be declared as a global variable with an undefined value.
             machine.define_global(id_lazy.first, undef, false);

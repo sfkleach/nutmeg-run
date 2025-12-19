@@ -106,39 +106,26 @@ inline bool is_tagged_ptr(Cell cell) {
 
 // Special literals (111 tag).
 // Use upper bits to distinguish between bool true, bool false, nil, etc.
-constexpr uint64_t SPECIAL_FALSE = TAG_SPECIAL;           // 0x7
-constexpr uint64_t SPECIAL_TRUE  = (1ULL << 3) | TAG_SPECIAL;  // 0xF
-constexpr uint64_t SPECIAL_NIL   = (2ULL << 3) | TAG_SPECIAL;  // 0x17
-constexpr uint64_t SPECIAL_UNDEF   = (3ULL << 3) | TAG_SPECIAL;  // 0x1F
+constexpr Cell SPECIAL_FALSE  = static_cast<Cell>(TAG_SPECIAL);           // 0x7
+constexpr Cell SPECIAL_TRUE   = static_cast<Cell>((1ULL << 3) | TAG_SPECIAL);  // 0xF
+constexpr Cell SPECIAL_NIL    = static_cast<Cell>((2ULL << 3) | TAG_SPECIAL);  // 0x17
+constexpr Cell SPECIAL_UNDEF  = static_cast<Cell>((3ULL << 3) | TAG_SPECIAL);  // 0x1F
 
 inline Cell make_bool(bool value) {
-    Cell c;
-    c.u64 = value ? SPECIAL_TRUE : SPECIAL_FALSE;
-    return c;
+    return value ? SPECIAL_TRUE : SPECIAL_FALSE;
 }
 
 inline bool as_bool(Cell cell) {
-    return cell.u64 == SPECIAL_TRUE;
+    return cell.u64 == SPECIAL_TRUE.u64;
 }
 
 inline bool is_bool(Cell cell) {
-    return cell.u64 == SPECIAL_FALSE || cell.u64 == SPECIAL_TRUE;
+    return cell.u64 == SPECIAL_FALSE.u64 || cell.u64 == SPECIAL_TRUE.u64;
 }
 
-inline Cell make_undef() {
-    Cell c;
-    c.u64 = SPECIAL_UNDEF;
-    return c;
-}
-
-inline Cell make_nil() {
-    Cell c;
-    c.u64 = SPECIAL_NIL;
-    return c;
-}
 
 inline bool is_nil(Cell cell) {
-    return cell.u64 == SPECIAL_NIL;
+    return cell.u64 == SPECIAL_NIL.u64;
 }
 
 // Helper for debugging: convert cell to string representation.
