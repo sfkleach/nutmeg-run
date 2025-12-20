@@ -478,13 +478,19 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
             push_return(SPECIAL_NIL);
         }
 
-        // Pop parameters from operand stack and push to return stack.
-        // Operand stack has params in reverse order, so popping gives us the right order.
+        // Pop parameters from operand stack into temporary buffer.
+        // Operand stack has params in reverse order (last param on top).
+        std::vector<Cell> params(nparams);
+        for (int i = nparams - 1; i >= 0; i--)
+        {
+            params[i] = pop();
+            fmt::print("Popping param {} = {}\n", i, cell_to_string(params[i]));
+        }
+        
+        // Push parameters to return stack in correct order (first param at lowest index).
         for (int i = 0; i < nparams; i++)
         {
-            Cell c = pop();
-            fmt::print("Popping param {} = {}\n", i, cell_to_string(c));
-            push_return(c);
+            push_return(params[i]);
         }
 
         // Save func_obj pointer so RETURN can read nlocals.
@@ -669,11 +675,18 @@ inline Cell* Machine::call_function_object(Cell* pc, Cell* func_ptr, int arg_cou
         push_return(SPECIAL_NIL);
     }
 
-    // Pop parameters from operand stack and push to return stack.
-    // Operand stack has params in reverse order, so popping gives us the right order.
+    // Pop parameters from operand stack into temporary buffer.
+    // Operand stack has params in reverse order (last param on top).
+    std::vector<Cell> params(nparams);
+    for (int i = nparams - 1; i >= 0; i--)
+    {
+        params[i] = pop();
+    }
+    
+    // Push parameters to return stack in correct order (first param at lowest index).
     for (int i = 0; i < nparams; i++)
     {
-        push_return(pop());
+        push_return(params[i]);
     }
 
     // Save func_obj pointer so RETURN can read nlocals.
@@ -728,11 +741,18 @@ Cell * Machine::LaunchInstruction(Cell *pc)
         push_return(SPECIAL_NIL);
     }
 
-    // Pop parameters from operand stack and push to return stack.
-    // Operand stack has params in reverse order, so popping gives us the right order.
+    // Pop parameters from operand stack into temporary buffer.
+    // Operand stack has params in reverse order (last param on top).
+    std::vector<Cell> params(nparams);
+    for (int i = nparams - 1; i >= 0; i--)
+    {
+        params[i] = pop();
+    }
+    
+    // Push parameters to return stack in correct order (first param at lowest index).
     for (int i = 0; i < nparams; i++)
     {
-        push_return(pop());
+        push_return(params[i]);
     }
 
     // Save func_obj pointer so RETURN can read nlocals.
