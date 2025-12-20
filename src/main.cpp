@@ -4,6 +4,7 @@
 #include <optional>
 #include <cstring>
 #include <unordered_set>
+#include <chrono>
 #include "bundle_reader.hpp"
 #include "machine.hpp"
 #include "heap.hpp"
@@ -148,7 +149,18 @@ int main(int argc, char* argv[]) {
         if constexpr (nutmeg::TRACE_MAIN) {
             fmt::print("Recovered func_object {}\n", static_cast<void*>(entry_func_ptr));
         }
+
+        // Measure execution time.
+        auto start_time = std::chrono::high_resolution_clock::now();
         machine.execute(entry_func_ptr);
+        auto end_time = std::chrono::high_resolution_clock::now();
+        
+        if constexpr (nutmeg::TRACE_TIMES) {
+            auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time);
+            fmt::print("Execution time: {}.{:06d} seconds\n", 
+                       duration.count() / 1000000, 
+                       duration.count() % 1000000);
+        }
 
         return 0;
 
