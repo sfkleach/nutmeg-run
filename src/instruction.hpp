@@ -23,6 +23,9 @@ enum class Opcode {
     SYSCALL_COUNTED,
     STACK_LENGTH,
     CHECK_BOOL,
+    LABEL,
+    GOTO,
+    IF_NOT,
     RETURN,
     HALT,
 };

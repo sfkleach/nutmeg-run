@@ -12,17 +12,17 @@ TEST_CASE("Machine can parse function object JSON", "[bundle_reader]") {
         "nparams": 1,
         "instructions": [
             {
-                "type": "PushInt",
-                "index": 42
+                "type": "push.int",
+                "ivalue": 42
             },
             {
-                "type": "PushString",
+                "type": "push.string",
                 "value": "hello"
             },
             {
-                "type": "SyscallCounted",
-                "name": "print",
-                "nargs": 1
+                "type": "syscall.counted",
+                "name": "println",
+                "index": 0
             }
         ]
     })";
@@ -31,7 +31,7 @@ TEST_CASE("Machine can parse function object JSON", "[bundle_reader]") {
     
     REQUIRE(func.nlocals == 2);
     REQUIRE(func.nparams == 1);
-    // Compiled code should be: PUSH_INT 42 PUSH_STRING cell SYSCALL_COUNTED name nargs HALT.
+    // Compiled code should be: PUSH_INT 42 PUSH_STRING cell SYSCALL_COUNTED index name HALT.
     // That's 1+1 + 1+1 + 1+2 + 1 = 8 instruction words.
     REQUIRE(func.code.size() == 8);
 }

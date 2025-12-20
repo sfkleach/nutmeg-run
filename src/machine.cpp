@@ -1,6 +1,7 @@
 #include "machine.hpp"
 #include "instruction.hpp"
 #include "sysfunctions.hpp"
+#include "parse_function_object.hpp"
 #include <nlohmann/json.hpp>
 #include <stdexcept>
 #include <fmt/core.h>
@@ -255,316 +256,8 @@ void Machine::execute_syscall(const std::string& name, int nargs) {
 }
 
 FunctionObject Machine::parse_function_object(const std::string& idname, const std::unordered_map<std::string, bool>& deps, const std::string& json_str) {
-    #ifdef TRACE_PLANT_INSTRUCTIONS
-    fmt::print("Planting instructions for function: {}\n", idname);
-    #endif
-    try {
-        nlohmann::json j = nlohmann::json::parse(json_str);
-
-        FunctionObject func;
-        func.nlocals = j.at("nlocals").get<int>();
-        func.nparams = j.at("nparams").get<int>();
-
-        // Compile instructions to threaded code.
-        for (const auto& inst_json : j.at("instructions")) {
-
-            fmt::print("Processing instruction JSON: {}\n", inst_json.dump());
-
-            Instruction inst;
-            inst.type = inst_json.at("type").get<std::string>();
-            if (inst_json.contains("name")) {
-                inst.name = inst_json.at("name").get<std::string>();
-            }
-            auto opcodes = string_to_opcode(inst.type);
-
-            bool is_lazy = false;
-            if (inst.name.has_value()) {
-                auto dep_it = deps.find(inst.name.value());
-                if (dep_it != deps.end()) {
-                    is_lazy = dep_it->second;
-                }
-                fmt::print("Instruction '{}' refers to global '{}', lazy={}\n",
-                           inst.type, inst.name.value(), is_lazy);
-            } else {
-                fmt::print("Instruction '{}' has no global name\n", inst.type);
-            }
-            inst.opcode = is_lazy ? opcodes.second : opcodes.first;
-
-            #ifdef TRACE_CODEGEN_DETAILED
-            fmt::print("  Parsing instruction: {} of type {}\n", inst.type, static_cast<int>(inst.opcode));
-            #endif
-
-            // Optional fields.
-            if (inst_json.contains("index")) {
-                inst.index = inst_json.at("index").get<int>();
-                #ifdef TRACE_CODEGEN_DETAILED
-                fmt::print("    Found index field: {}\n", inst.index.value());
-                fmt::print("    index.hasvalue() = {}\n", inst.index.has_value());
-                #endif
-            }
-            if (inst_json.contains("value")) {
-                inst.value = inst_json.at("value").get<std::string>();
-            }
-            if (inst_json.contains("ivalue")) {
-                inst.ivalue = inst_json.at("ivalue").get<int64_t>();
-            }
-
-            // Compile to threaded code: emit label address followed by operands.
-            auto opcode_it = opcode_map_.find(inst.opcode);
-            if (opcode_it == opcode_map_.end()) {
-                throw std::runtime_error(fmt::format("Opcode not found in map: {}", static_cast<int>(inst.opcode)));
-            }
-            Cell label_word;
-            label_word.label_addr = opcode_it->second;
-            func.code.push_back(label_word);
-            #ifdef TRACE_CODEGEN_DETAILED
-            fmt::print("  Compiling instruction: {} at label {}\n", inst.type, static_cast<void*>(label_word.label_addr));
-            #endif
-
-            // Add immediate operands based on instruction type.
-            fmt::print("Processing operands for instruction: {}\n", opcode_to_string(inst.opcode));
-            switch (inst.opcode) {
-            case Opcode::PUSH_INT: {
-                if (!inst.ivalue.has_value()) {
-                    throw std::runtime_error("PUSH_INT requires an ivalue field");
-                }
-                int64_t int_value = inst.ivalue.value();
-                #ifdef TRACE_PLANT_INSTRUCTIONS
-                fmt::print("Plant: PUSH_INT {}\n", int_value);
-                #endif
-
-                Cell operand = make_tagged_int(int_value);
-                func.code.push_back(operand);
-                break;
-            }
-
-            case Opcode::PUSH_BOOL: {
-                if (!inst.value.has_value()) {
-                    throw std::runtime_error("PUSH_BOOL requires a value field");
-                }
-                std::string bool_str = inst.value.value();
-                bool bool_value;
-                if (bool_str == "true") {
-                    bool_value = true;
-                } else if (bool_str == "false") {
-                    bool_value = false;
-                } else {
-                    throw std::runtime_error("PUSH_BOOL value must be 'true' or 'false'");
-                }
-                #ifdef TRACE_PLANT_INSTRUCTIONS
-                fmt::print("Plant: PUSH_BOOL {}\n", bool_value);
-                #endif
-
-                Cell operand = make_bool(bool_value);
-                func.code.push_back(operand);
-                break;
-            }
-
-            case Opcode::PUSH_STRING: {
-                #ifdef TRACE_PLANT_INSTRUCTIONS
-                fmt::print("Plant: PUSH_STRING\n");
-                #endif
-                // Allocate string in heap and store the Cell.
-                std::string str_value = inst.value.value();
-                Cell str_cell = allocate_string(str_value);
-                func.code.push_back(str_cell);
-                break;
-            }
-
-            case Opcode::POP_LOCAL: {
-                throw std::runtime_error("POP_LOCAL not yet implemented");
-            }
-
-            case Opcode::PUSH_LOCAL: {
-                Cell operand;
-                operand.i64 = inst.calc_offset();
-                func.code.push_back(operand);
-                break;
-            }
-
-            case Opcode::PUSH_GLOBAL_LAZY:
-            case Opcode::PUSH_GLOBAL: {
-                #ifdef TRACE_PLANT_INSTRUCTIONS
-                fmt::print("Plant: PUSH_GLOBAL\n");
-                #endif
-
-                if (!inst.name.has_value()) {
-                    throw std::runtime_error("PUSH_GLOBAL requires a name field");
-                }
-
-                Ident* ident_ptr = lookup_ident(inst.name.value());
-                if (ident_ptr == nullptr) {
-                    throw new std::runtime_error(
-                        fmt::format("PUSH_GLOBAL: undefined global variable: {}", inst.name.value()));
-                }
-
-                // Store pointer to global name string (kept in static storage).
-                Cell ident_operand;
-                ident_operand.ptr = static_cast<void*>(ident_ptr);
-                func.code.push_back(ident_operand);
-                break;
-            }
-
-            case Opcode::CALL_GLOBAL_COUNTED_LAZY:
-            case Opcode::CALL_GLOBAL_COUNTED: {
-                #ifdef TRACE_PLANT_INSTRUCTIONS
-                fmt::print("Plant: (L_)CALL_GLOBAL_COUNTED\n");
-                #endif
-                // CALL_GLOBAL has two arguments:
-                // * index = the local variable index to get the previous stack length from, and
-                // * name = the name of the global function to call.
-                if (!inst.index.has_value()) {
-                    throw std::runtime_error("CALL_GLOBAL_COUNTED requires an index field");
-                }
-                if (!inst.name.has_value()) {
-                    throw std::runtime_error("CALL_GLOBAL_COUNTED requires a name field");
-                }
-
-                // Translate the name into an Ident* pointer.
-                Ident* ident_ptr = lookup_ident(inst.name.value());
-                if (ident_ptr == nullptr) {
-                    throw new std::runtime_error(
-                        fmt::format("CALL_GLOBAL_COUNTED: undefined global function: {}", inst.name.value()));
-                }
-
-                #ifdef TRACE_CODEGEN_DETAILED
-                fmt::print("  CALL_GLOBAL_COUNTED compiling with index={} name={} ident_ptr={}\n",
-                           inst.index.value(), inst.name.value(), static_cast<void*>(ident_ptr));
-                #endif
-
-                // Generate the index operand as a raw offset.
-                Cell index_operand = make_raw_i64(inst.calc_offset());
-                func.code.push_back(index_operand);
-                #ifdef TRACE_PLANT_INSTRUCTIONS_DETAILED
-                fmt::print("    Pushed index operand: {}\n", index_operand.i64);
-                #endif
-
-                // Now push the Ident* pointer as the function operand.
-                Cell func_operand;
-                func_operand.ptr = static_cast<void*>(ident_ptr);
-                func.code.push_back(func_operand);
-                break;
-            }
-
-
-            case Opcode::SYSCALL_COUNTED: {
-                // SYSCALL has two arguments:
-                // * index = the local variable index to get the previous stack length from, and
-                // * name = the name of the syscall.
-                #ifdef TRACE_PLANT_INSTRUCTIONS
-                fmt::print("Plant: SYSCALL_COUNTED\n");
-                #endif
-                if (!inst.index.has_value()) {
-                    throw std::runtime_error("SYSCALL_COUNTED requires an index field");
-                }
-                if (!inst.name.has_value()) {
-                    throw std::runtime_error("SYSCALL_COUNTED requires a name field");
-                }
-                #ifdef TRACE_PLANT_INSTRUCTIONS_DETAILED
-                fmt::print("  SYSCALL_COUNTED compiling with index={} name={}\n", inst.index.value(), inst.name.value());
-                #endif
-                // L_SYSCALL_COUNTED requires two operands: the index and the sys-function pointer.
-                Cell index_operand = make_raw_i64(inst.calc_offset());
-                func.code.push_back(index_operand);
-
-                // Look up sys-function in the table.
-                auto it = sysfunctions_table.find(inst.name.value());
-                if (it == sysfunctions_table.end()) {
-                    throw std::runtime_error(fmt::format("Unknown sys-function: {}", inst.name.value()));
-                }
-                SysFunction sys_function = it->second;
-                Cell func_operand;
-                func_operand.ptr = reinterpret_cast<void*>(sys_function);
-                func.code.push_back(func_operand);
-                break;
-            }
-
-
-            case Opcode::STACK_LENGTH: {
-                // We will assign the current stack length into the local
-                // variable defined by index.
-                #ifdef TRACE_PLANT_INSTRUCTIONS
-                fmt::print("Plant: STACK_LENGTH\n");
-                #endif
-                 if (!inst.index.has_value()) {
-                    throw std::runtime_error("STACK_LENGTH requires an index field");
-                }
-                int offset = inst.calc_offset();
-                Cell c = make_raw_i64(offset);
-                func.code.push_back(c);
-                break;
-            }
-
-            case Opcode::CHECK_BOOL: {
-                // Check that the stack has grown by exactly 1 and that the
-                // top of stack is a boolean. Index refers to the local
-                // variable that holds the "before" stack length.
-                #ifdef TRACE_PLANT_INSTRUCTIONS
-                fmt::print("Plant: CHECK_BOOL\n");
-                #endif
-                if (!inst.index.has_value()) {
-                    throw std::runtime_error("CHECK_BOOL requires an index field");
-                }
-                int offset = inst.calc_offset();
-                Cell c = make_raw_i64(offset);
-                func.code.push_back(c);
-                break;
-            }
-
-            case Opcode::RETURN:
-            case Opcode::HALT: {
-                // No operands.
-                break;
-            }
-
-            case Opcode::DONE: {
-                if (!inst.index.has_value()) {
-                    throw std::runtime_error("CALL_GLOBAL_COUNTED requires an index field");
-                }
-                if (!inst.name.has_value()) {
-                    throw std::runtime_error("CALL_GLOBAL_COUNTED requires a name field");
-                }
-
-                // Translate the name into an Ident* pointer.
-                Ident* ident_ptr = lookup_ident(inst.name.value());
-                if (ident_ptr == nullptr) {
-                    throw new std::runtime_error(
-                        fmt::format("DONE: undefined global function: {}", inst.name.value()));
-                }
-
-                // Generate the index operand as a raw offset.
-                Cell index_operand = make_raw_i64(inst.calc_offset());
-                func.code.push_back(index_operand);
-                #ifdef TRACE_PLANT_INSTRUCTIONS_DETAILED
-                fmt::print("    Pushed index operand: {}\n", index_operand.i64);
-                #endif
-
-                // Now push the Ident* pointer as the function operand.
-                Cell func_operand;
-                func_operand.ptr = static_cast<void*>(ident_ptr);
-                func.code.push_back(func_operand);
-                break;
-            }
-
-            default:
-                throw std::runtime_error(fmt::format("Unhandled opcode during compilation: {}", static_cast<int>(inst.opcode)));
-            }
-        }
-
-        // Add HALT at the end.
-        Cell halt_word;
-        halt_word.label_addr = opcode_map_.at(Opcode::HALT);
-        func.code.push_back(halt_word);
-
-        #ifdef TRACE_PLANT_INSTRUCTIONS
-        fmt::print("End of instructions for function: {}\n", idname);
-        #endif
-        
-        return func;
-    } catch (const nlohmann::json::exception& e) {
-        throw std::runtime_error(fmt::format("JSON parsing error: {}", e.what()));
-    }
-
+    ParseFunctionObject parser(*this, idname, deps);
+    return parser.parse(json_str);
 }
 
 
@@ -609,6 +302,8 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
             {Opcode::SYSCALL_COUNTED, &&L_SYSCALL_COUNTED},
             {Opcode::STACK_LENGTH, &&L_STACK_LENGTH},
             {Opcode::CHECK_BOOL, &&L_CHECK_BOOL},
+            {Opcode::GOTO, &&L_GOTO},
+            {Opcode::IF_NOT, &&L_IF_NOT},
             {Opcode::RETURN, &&L_RETURN},
             {Opcode::HALT, &&L_HALT},
             {Opcode::DONE, &&L_DONE},
@@ -859,6 +554,49 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
         }
 
         goto *(pc++)->label_addr;
+    }
+
+    L_GOTO: {
+        // Unconditional jump. Read the relative offset and adjust pc.
+        int64_t offset = (pc++)->i64;
+        #ifdef DEBUG_INSTRUCTIONS
+        fmt::print("GOTO, offset = {}\n", offset);
+        #endif
+        
+        // Apply the offset to pc. The offset is relative to the current pc position.
+        pc += offset;
+        
+        // Jump to the instruction at the target.
+        goto *pc++->label_addr;
+    }
+
+    L_IF_NOT: {
+        // Conditional jump: jump if top of stack is SPECIAL_FALSE.
+        int64_t offset = (pc++)->i64;
+        
+        // Pop the condition from the stack.
+        Cell condition = pop();
+        
+        #ifdef DEBUG_INSTRUCTIONS
+        fmt::print("IF_NOT, offset = {}, condition = {}\n", offset, cell_to_string(condition));
+        #endif
+        
+        // Check if the condition is false.
+        if (condition.u64 == SPECIAL_FALSE.u64) {
+            // Condition is false - take the jump.
+            pc += offset;
+            #ifdef DEBUG_INSTRUCTIONS
+            fmt::print("  Taking jump to offset {}\n", offset);
+            #endif
+        } else {
+            // Condition is not false - fall through (no jump).
+            #ifdef DEBUG_INSTRUCTIONS
+            fmt::print("  Not taking jump, falling through\n");
+            #endif
+        }
+        
+        // Continue execution at the (possibly adjusted) pc.
+        goto *pc++->label_addr;
     }
 
     L_RETURN: {
