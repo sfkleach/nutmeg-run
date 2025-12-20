@@ -28,7 +28,9 @@ FunctionObject ParseFunctionObject::parse(const std::string& json_str) {
         
         // Compile instructions to threaded code.
         for (const auto& inst_json : j.at("instructions")) {
-            fmt::print("Processing instruction JSON: {}\n", inst_json.dump());
+            if constexpr (TRACE_PLANT_INSTRUCTIONS) {
+                fmt::print("Processing instruction JSON: {}\n", inst_json.dump());
+            }
             
             Instruction inst;
             inst.type = inst_json.at("type").get<std::string>();
@@ -43,10 +45,14 @@ FunctionObject ParseFunctionObject::parse(const std::string& json_str) {
                 if (dep_it != deps_.end()) {
                     is_lazy = dep_it->second;
                 }
-                fmt::print("Instruction '{}' refers to global '{}', lazy={}\n",
-                          inst.type, inst.name.value(), is_lazy);
+                if constexpr (TODO_WARNINGS) {
+                    fmt::print("Instruction '{}' refers to global '{}', lazy={}\n",
+                              inst.type, inst.name.value(), is_lazy);
+                }
             } else {
-                fmt::print("Instruction '{}' has no global name\n", inst.type);
+                if constexpr (TODO_WARNINGS) {
+                    fmt::print("Instruction '{}' has no global name\n", inst.type);
+                }
             }
             inst.opcode = is_lazy ? opcodes.second : opcodes.first;
             
@@ -99,8 +105,10 @@ void ParseFunctionObject::plant_instruction(FunctionObject& func, const Instruct
     func.code.push_back(label_word);
     
     // Emit instruction-specific operands.
-    fmt::print("Processing operands for instruction: {}\n", opcode_to_string(inst.opcode));
-    
+    if constexpr (TRACE_PLANT_INSTRUCTIONS) {
+        fmt::print("Processing operands for instruction: {}\n", opcode_to_string(inst.opcode));
+    }
+
     switch (inst.opcode) {
         case Opcode::PUSH_INT:
             plant_push_int(func, inst);

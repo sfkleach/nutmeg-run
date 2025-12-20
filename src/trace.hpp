@@ -3,7 +3,7 @@
 
 namespace nutmeg {
     // Master flag - set to false to disable all tracing at compile time.
-    inline constexpr bool ENABLE_TRACING = true;
+    inline constexpr bool ENABLE_TRACING = false;
 
     // Instruction execution tracing.
     inline constexpr bool DEBUG_INSTRUCTIONS = ENABLE_TRACING && true;
@@ -22,6 +22,13 @@ namespace nutmeg {
 
     // Main program tracing.
     inline constexpr bool TRACE_MAIN = ENABLE_TRACING && false;
+
+    // TODO warnings for incomplete features.
+    inline constexpr bool TODO_WARNINGS = ENABLE_TRACING && true;
+
+    inline constexpr bool DEBUG = ENABLE_TRACING && false;
+
+    inline constexpr bool TRACE_BUNDLE_READER = ENABLE_TRACING && false;
 }
 
 #endif // TRACE_HPP

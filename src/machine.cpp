@@ -477,7 +477,9 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
         for (int i = nparams - 1; i >= 0; i--)
         {
             params[i] = pop();
-            fmt::print("Popping param {} = {}\n", i, cell_to_string(params[i]));
+            if constexpr (TRACE_EXECUTION) {
+                fmt::print("Popped param {} = {}\n", i, cell_to_string(params[i]));
+            }   
         }
         
         // Push parameters to return stack in correct order (first param at lowest index).

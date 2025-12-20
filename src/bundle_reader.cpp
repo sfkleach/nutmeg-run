@@ -1,6 +1,7 @@
 #include "bundle_reader.hpp"
 #include <nlohmann/json.hpp>
 #include <fmt/core.h>
+#include "trace.hpp"
 
 using json = nlohmann::json;
 
@@ -88,11 +89,13 @@ std::unordered_map<std::string, bool> BundleReader::get_dependencies(const std::
     std::unordered_map<std::string, bool> dependencies;
     get_dependencies_recursive(idname, dependencies);
 
-    fmt::print("Dependencies for '{}' [\n", idname);
-    for (const auto& [dep, is_lazy] : dependencies) {
-        fmt::print("  {} (lazy: {})\n", dep, is_lazy);
+    if constexpr (TRACE_BUNDLE_READER) {
+        fmt::print("Dependencies for '{}' [\n", idname);
+        for (const auto& [dep, is_lazy] : dependencies) {
+            fmt::print("  {} (lazy: {})\n", dep, is_lazy);
+        }
+        fmt::print("]   \n");
     }
-    fmt::print("]   \n");
     return dependencies;
 }
 
