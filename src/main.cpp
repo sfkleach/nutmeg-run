@@ -7,8 +7,7 @@
 #include "bundle_reader.hpp"
 #include "machine.hpp"
 #include "heap.hpp"
-
-// #define TRACE_MAIN
+#include "trace.hpp"
 
 struct CommandLineArgs {
     std::optional<std::string> entry_point;
@@ -114,41 +113,41 @@ int main(int argc, char* argv[]) {
         nutmeg::Machine machine;
 
         // Load all bindings transitively from the entry point.
-        #ifdef TRACE_MAIN
-        fmt::print("Loading entry point: {}\n", entry_point_name);
-        #endif
+        if constexpr (nutmeg::TRACE_MAIN) {
+            fmt::print("Loading entry point: {}\n", entry_point_name);
+        }
         std::unordered_map<std::string, bool> deps = reader.get_dependencies(entry_point_name);
         nutmeg::Cell undef = nutmeg::SPECIAL_UNDEF;
         for (const auto& id_lazy : deps) {
             // Each dependency should be declared as a global variable with an undefined value.
             machine.define_global(id_lazy.first, undef, false);
-            #ifdef TRACE_MAIN
-            fmt::print("  Found dependency: {}\n", id_lazy.first);
-            #endif
+            if constexpr (nutmeg::TRACE_MAIN) {
+                fmt::print("  Found dependency: {}\n", id_lazy.first);
+            }
         }
 
         for (const auto& id_lazy : deps) {
-            #ifdef TRACE_MAIN
-            fmt::print("  Dependency: {}\n", id_lazy.first);
-            #endif
+            if constexpr (nutmeg::TRACE_MAIN) {
+                fmt::print("  Dependency: {}\n", id_lazy.first);
+            }
             nutmeg::Binding binding = reader.get_binding(id_lazy.first);
             nutmeg::FunctionObject func = machine.parse_function_object(id_lazy.first, deps, binding.value);
             nutmeg::Cell* func_obj = machine.allocate_function(func.code, func.nlocals, func.nparams);
             machine.define_global(id_lazy.first, make_tagged_ptr(func_obj), binding.lazy);
-            #ifdef TRACE_MAIN
-            fmt::print("  Loaded func_object {}\n", static_cast<void*>(func_obj));
-            fmt::print("  Recovering func object: {}\n", as_detagged_ptr(make_tagged_ptr(func_obj)));
-            #endif
+            if constexpr (nutmeg::TRACE_MAIN) {
+                fmt::print("  Loaded func_object {}\n", static_cast<void*>(func_obj));
+                fmt::print("  Recovering func object: {}\n", as_detagged_ptr(make_tagged_ptr(func_obj)));
+            }
         }
-        #ifdef TRACE_MAIN
-        fmt::print("All dependencies loaded.\n");
-        #endif
+        if constexpr (nutmeg::TRACE_MAIN) {
+            fmt::print("All dependencies loaded.\n");
+        }
 
         // Get the entry point function and execute it.
         nutmeg::Cell* entry_func_ptr = machine.get_global_cell_ptr(entry_point_name);
-        #ifdef TRACE_MAIN
-        fmt::print("Recovered func_object {}\n", static_cast<void*>(entry_func_ptr));
-        #endif
+        if constexpr (nutmeg::TRACE_MAIN) {
+            fmt::print("Recovered func_object {}\n", static_cast<void*>(entry_func_ptr));
+        }
         machine.execute(entry_func_ptr);
 
         return 0;

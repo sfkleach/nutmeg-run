@@ -2,11 +2,10 @@
 #include "machine.hpp"
 #include "instruction.hpp"
 #include "sysfunctions.hpp"
+#include "trace.hpp"
 #include <nlohmann/json.hpp>
 #include <stdexcept>
 #include <fmt/core.h>
-
-#define TRACE_PLANT_INSTRUCTIONS
 
 namespace nutmeg {
 
@@ -16,9 +15,9 @@ ParseFunctionObject::ParseFunctionObject(Machine& machine, const std::string& id
 }
 
 FunctionObject ParseFunctionObject::parse(const std::string& json_str) {
-    #ifdef TRACE_PLANT_INSTRUCTIONS
-    fmt::print("Planting instructions for function: {}\n", idname_);
-    #endif
+    if constexpr (TRACE_PLANT_INSTRUCTIONS) {
+        fmt::print("Planting instructions for function: {}\n", idname_);
+    }
     
     try {
         nlohmann::json j = nlohmann::json::parse(json_str);
@@ -72,9 +71,9 @@ FunctionObject ParseFunctionObject::parse(const std::string& json_str) {
         halt_word.label_addr = machine_.get_opcode_map().at(Opcode::HALT);
         func.code.push_back(halt_word);
         
-        #ifdef TRACE_PLANT_INSTRUCTIONS
-        fmt::print("End of instructions for function: {}\n", idname_);
-        #endif
+        if constexpr (TRACE_PLANT_INSTRUCTIONS) {
+            fmt::print("End of instructions for function: {}\n", idname_);
+        }
         
         return func;
     } catch (const nlohmann::json::exception& e) {
@@ -155,9 +154,9 @@ void ParseFunctionObject::plant_instruction(FunctionObject& func, const Instruct
 }
 
 void ParseFunctionObject::plant_label(FunctionObject& func, const Instruction& inst) {
-    #ifdef TRACE_PLANT_INSTRUCTIONS
-    fmt::print("Plant: LABEL\n");
-    #endif
+    if constexpr (TRACE_PLANT_INSTRUCTIONS) {
+        fmt::print("Plant: LABEL\n");
+    }
     if (!inst.value.has_value()) {
         throw std::runtime_error("LABEL requires a value field");
     }
@@ -167,9 +166,9 @@ void ParseFunctionObject::plant_label(FunctionObject& func, const Instruction& i
     size_t label_position = func.code.size();
     label_map_[label_name] = label_position;
     
-    #ifdef TRACE_PLANT_INSTRUCTIONS
-    fmt::print("  Label '{}' defined at position {}\n", label_name, label_position);
-    #endif
+    if constexpr (TRACE_PLANT_INSTRUCTIONS) {
+        fmt::print("  Label '{}' defined at position {}\n", label_name, label_position);
+    }
     
     // Resolve any forward references to this label.
     auto fwd_it = forward_refs_.find(label_name);
@@ -177,9 +176,9 @@ void ParseFunctionObject::plant_label(FunctionObject& func, const Instruction& i
         for (size_t ref_pos : fwd_it->second) {
             int64_t offset = static_cast<int64_t>(label_position) - static_cast<int64_t>(ref_pos + 1);
             func.code[ref_pos].i64 = offset;
-            #ifdef TRACE_PLANT_INSTRUCTIONS
-            fmt::print("  Patched forward reference at position {} with offset {}\n", ref_pos, offset);
-            #endif
+            if constexpr (TRACE_PLANT_INSTRUCTIONS) {
+                fmt::print("  Patched forward reference at position {} with offset {}\n", ref_pos, offset);
+            }
         }
         forward_refs_.erase(fwd_it);
     }
@@ -190,9 +189,9 @@ void ParseFunctionObject::plant_push_int(FunctionObject& func, const Instruction
         throw std::runtime_error("PUSH_INT requires an ivalue field");
     }
     int64_t int_value = inst.ivalue.value();
-    #ifdef TRACE_PLANT_INSTRUCTIONS
-    fmt::print("Plant: PUSH_INT {}\n", int_value);
-    #endif
+    if constexpr (TRACE_PLANT_INSTRUCTIONS) {
+        fmt::print("Plant: PUSH_INT {}\n", int_value);
+    }
     
     Cell operand = make_tagged_int(int_value);
     func.code.push_back(operand);
@@ -211,18 +210,18 @@ void ParseFunctionObject::plant_push_bool(FunctionObject& func, const Instructio
     } else {
         throw std::runtime_error("PUSH_BOOL value must be 'true' or 'false'");
     }
-    #ifdef TRACE_PLANT_INSTRUCTIONS
-    fmt::print("Plant: PUSH_BOOL {}\n", bool_value);
-    #endif
+    if constexpr (TRACE_PLANT_INSTRUCTIONS) {
+        fmt::print("Plant: PUSH_BOOL {}\n", bool_value);
+    }
     
     Cell operand = make_bool(bool_value);
     func.code.push_back(operand);
 }
 
 void ParseFunctionObject::plant_push_string(FunctionObject& func, const Instruction& inst) {
-    #ifdef TRACE_PLANT_INSTRUCTIONS
-    fmt::print("Plant: PUSH_STRING\n");
-    #endif
+    if constexpr (TRACE_PLANT_INSTRUCTIONS) {
+        fmt::print("Plant: PUSH_STRING\n");
+    }
     std::string str_value = inst.value.value();
     Cell str_cell = machine_.allocate_string(str_value);
     func.code.push_back(str_cell);
@@ -239,9 +238,9 @@ void ParseFunctionObject::plant_push_local(FunctionObject& func, const Instructi
 }
 
 void ParseFunctionObject::plant_push_global(FunctionObject& func, const Instruction& inst) {
-    #ifdef TRACE_PLANT_INSTRUCTIONS
-    fmt::print("Plant: PUSH_GLOBAL\n");
-    #endif
+    if constexpr (TRACE_PLANT_INSTRUCTIONS) {
+        fmt::print("Plant: PUSH_GLOBAL\n");
+    }
     
     if (!inst.name.has_value()) {
         throw std::runtime_error("PUSH_GLOBAL requires a name field");
@@ -259,9 +258,9 @@ void ParseFunctionObject::plant_push_global(FunctionObject& func, const Instruct
 }
 
 void ParseFunctionObject::plant_call_global_counted(FunctionObject& func, const Instruction& inst) {
-    #ifdef TRACE_PLANT_INSTRUCTIONS
-    fmt::print("Plant: (L_)CALL_GLOBAL_COUNTED\n");
-    #endif
+    if constexpr (TRACE_PLANT_INSTRUCTIONS) {
+        fmt::print("Plant: (L_)CALL_GLOBAL_COUNTED\n");
+    }
     
     if (!inst.index.has_value()) {
         throw std::runtime_error("CALL_GLOBAL_COUNTED requires an index field");
@@ -285,9 +284,9 @@ void ParseFunctionObject::plant_call_global_counted(FunctionObject& func, const 
 }
 
 void ParseFunctionObject::plant_syscall_counted(FunctionObject& func, const Instruction& inst) {
-    #ifdef TRACE_PLANT_INSTRUCTIONS
-    fmt::print("Plant: SYSCALL_COUNTED\n");
-    #endif
+    if constexpr (TRACE_PLANT_INSTRUCTIONS) {
+        fmt::print("Plant: SYSCALL_COUNTED\n");
+    }
     
     if (!inst.index.has_value()) {
         throw std::runtime_error("SYSCALL_COUNTED requires an index field");
@@ -310,9 +309,9 @@ void ParseFunctionObject::plant_syscall_counted(FunctionObject& func, const Inst
 }
 
 void ParseFunctionObject::plant_stack_length(FunctionObject& func, const Instruction& inst) {
-    #ifdef TRACE_PLANT_INSTRUCTIONS
-    fmt::print("Plant: STACK_LENGTH\n");
-    #endif
+    if constexpr (TRACE_PLANT_INSTRUCTIONS) {
+        fmt::print("Plant: STACK_LENGTH\n");
+    }
     
     if (!inst.index.has_value()) {
         throw std::runtime_error("STACK_LENGTH requires an index field");
@@ -323,9 +322,9 @@ void ParseFunctionObject::plant_stack_length(FunctionObject& func, const Instruc
 }
 
 void ParseFunctionObject::plant_check_bool(FunctionObject& func, const Instruction& inst) {
-    #ifdef TRACE_PLANT_INSTRUCTIONS
-    fmt::print("Plant: CHECK_BOOL\n");
-    #endif
+    if constexpr (TRACE_PLANT_INSTRUCTIONS) {
+        fmt::print("Plant: CHECK_BOOL\n");
+    }
     
     if (!inst.index.has_value()) {
         throw std::runtime_error("CHECK_BOOL requires an index field");
@@ -336,9 +335,9 @@ void ParseFunctionObject::plant_check_bool(FunctionObject& func, const Instructi
 }
 
 void ParseFunctionObject::plant_goto(FunctionObject& func, const Instruction& inst) {
-    #ifdef TRACE_PLANT_INSTRUCTIONS
-    fmt::print("Plant: GOTO\n");
-    #endif
+    if constexpr (TRACE_PLANT_INSTRUCTIONS) {
+        fmt::print("Plant: GOTO\n");
+    }
     
     if (!inst.value.has_value()) {
         throw std::runtime_error("GOTO requires a value field");
@@ -347,9 +346,9 @@ void ParseFunctionObject::plant_goto(FunctionObject& func, const Instruction& in
 }
 
 void ParseFunctionObject::plant_if_not(FunctionObject& func, const Instruction& inst) {
-    #ifdef TRACE_PLANT_INSTRUCTIONS
-    fmt::print("Plant: IF_NOT\n");
-    #endif
+    if constexpr (TRACE_PLANT_INSTRUCTIONS) {
+        fmt::print("Plant: IF_NOT\n");
+    }
     
     if (!inst.value.has_value()) {
         throw std::runtime_error("IF_NOT requires a value field");
@@ -371,16 +370,16 @@ void ParseFunctionObject::plant_jump_instruction(FunctionObject& func, const std
         size_t target_pos = label_it->second;
         int64_t offset = static_cast<int64_t>(target_pos) - static_cast<int64_t>(operand_pos + 1);
         func.code[operand_pos].i64 = offset;
-        #ifdef TRACE_PLANT_INSTRUCTIONS
-        fmt::print("  '{}' (backward) at position {}, target {}, offset {}\n",
-                   label_name, operand_pos, target_pos, offset);
-        #endif
+        if constexpr (TRACE_PLANT_INSTRUCTIONS) {
+            fmt::print("  '{}' (backward) at position {}, target {}, offset {}\n",
+                       label_name, operand_pos, target_pos, offset);
+        }
     } else {
         // Forward jump - add to forward references.
         forward_refs_[label_name].push_back(operand_pos);
-        #ifdef TRACE_PLANT_INSTRUCTIONS
-        fmt::print("  '{}' (forward) at position {}, deferred\n", label_name, operand_pos);
-        #endif
+        if constexpr (TRACE_PLANT_INSTRUCTIONS) {
+            fmt::print("  '{}' (forward) at position {}, deferred\n", label_name, operand_pos);
+        }
     }
 }
 
