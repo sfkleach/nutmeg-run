@@ -4,12 +4,13 @@
 #include "value.hpp"
 #include <stdexcept>
 #include <cstddef>
+#include <algorithm>
 
 namespace nutmeg {
 
 // Enable bounds checking for stack operations.
 // Set to false for maximum performance in production builds.
-constexpr bool ENABLE_STACK_CHECKS = true;
+constexpr bool ENABLE_STACK_CHECKS = false;
 
 // Lightweight stack implementation for VM stacks.
 // Uses a fixed-size backing array with pointer-based operations.
@@ -97,6 +98,41 @@ public:
         if constexpr (ENABLE_STACK_CHECKS) {
             if (top_ - count < base_) {
                 throw std::runtime_error("Stack underflow");
+            }
+        }
+        top_ -= count;
+    }
+
+    // Push the same value multiple times.
+    inline void push_multiple(Cell value, size_t count) {
+        if constexpr (ENABLE_STACK_CHECKS) {
+            if (top_ + count > limit_) {
+                throw std::runtime_error("Stack overflow");
+            }
+        }
+        std::fill_n(top_, count, value);
+        top_ += count;
+    }
+
+    inline void move_multiple(size_t count, CellStack& target_stack) {
+        if constexpr (ENABLE_STACK_CHECKS) {
+            if (top_ - count < base_) {
+                throw std::runtime_error("Stack underflow during move");
+            }
+            if (target_stack.top_ + count > target_stack.limit_) {
+                throw std::runtime_error("Target stack overflow during move");
+            }
+        }
+        // Copy count elements from source to target, preserving order.
+        std::copy_n(top_ - count, count, target_stack.top_);
+        top_ -= count;
+        target_stack.top_ += count;
+    }
+
+    inline void discard_multiple(size_t count) {
+        if constexpr (ENABLE_STACK_CHECKS) {
+            if (top_ - count < base_) {
+                throw std::runtime_error("Stack underflow during discard");
             }
         }
         top_ -= count;

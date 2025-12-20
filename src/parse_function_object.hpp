@@ -24,6 +24,8 @@ public:
     FunctionObject parse(const std::string& json_str);
 
 private:
+    int calc_offset(const Instruction& inst);
+
     // Parse and plant a single instruction.
     void plant_instruction(FunctionObject& func, const Instruction& inst);
     
@@ -53,6 +55,7 @@ private:
     Machine& machine_;
     const std::string& idname_;
     const std::unordered_map<std::string, bool>& deps_;
+    FunctionObject func_;
     
     // Label tracking for jumps.
     std::unordered_map<std::string, size_t> label_map_;

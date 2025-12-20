@@ -50,25 +50,43 @@ public:
     const std::unordered_map<Opcode, void*>& get_opcode_map() const { return opcode_map_; }
 
     // Stack operations.
-    void push(Cell value);
-    Cell pop();
-    void pop_multiple(size_t count);
-    Cell& peek();
-    Cell& peek_at(size_t index);
+    inline void push(Cell value) {
+        operand_stack_.push(value);
+    }
+    inline Cell pop() {
+        return operand_stack_.pop();
+    }
+    inline void pop_multiple(size_t count) {
+        operand_stack_.pop_multiple(count);
+    }
+    inline Cell& peek() {
+        return operand_stack_.peek();
+    }
+    inline Cell& peek_at(size_t index) {
+        return operand_stack_.peek_at(index);
+    }
     bool empty() const;
     size_t stack_size() const;
 
     // Return stack operations.
-    void push_return(Cell value);
-    Cell pop_return();
+    inline void push_return(Cell value) {
+        return_stack_.push(value);
+    }
+    inline Cell pop_return() {
+        return return_stack_.pop();
+    }
 
-    Cell& get_return_address();
-    Cell& get_frame_function_object();
+    inline Cell& get_return_address() {
+        return return_stack_.offset_from_top(0);
+    }
+    inline Cell& get_frame_function_object() {
+        return return_stack_.offset_from_top(1);
+    }
     Cell& get_local_variable(int offset);
 
     // Pop nlocals slots from the return stack.
     void pop_return_frame(int nlocals) {
-        return_stack_.resize(return_stack_.size() - nlocals);
+        return_stack_.discard_multiple(nlocals);
     }
 
     // Global dictionary operations.

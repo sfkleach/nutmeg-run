@@ -57,9 +57,10 @@ struct Instruction {
     // PUSH_GLOBAL, SYSCALL_COUNTED, CALL_GLOBAL_COUNTED.
     std::optional<std::string> name;
 
-    int calc_offset() const {
+    int calc_offset(int nlocals) const {
         if (index.has_value()) {
-            return index.value() + 3;  // Adjust for tagged int representation.
+            // Adjust for reversal of order and skipping the first two return stack entries (return address and func_obj).
+            return nlocals - index.value() + 2;
         }
         throw std::runtime_error("calc_offset called on instruction without index");
     }

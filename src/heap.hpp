@@ -122,6 +122,10 @@ public:
     // Get function metadata.
     int get_function_nlocals(Cell* obj_ptr) const;
     int get_function_nparams(Cell* obj_ptr) const;
+    int get_function_nextras(Cell* obj_ptr) const;
+    
+    // Get both nlocals and nparams efficiently (single memory access).
+    std::pair<int, int> get_function_extras_and_params(Cell* obj_ptr) const;
 
     // Get access to the pool for ObjectBuilder.
     Pool* get_pool() { return &pool_; }

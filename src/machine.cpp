@@ -24,49 +24,12 @@ Machine::~Machine() {
 }
 
 // Stack operations.
-void Machine::push(Cell value) {
-    operand_stack_.push(value);
-}
-
-Cell Machine::pop() {
-    return operand_stack_.pop();
-}
-
-void Machine::pop_multiple(size_t count) {
-    operand_stack_.pop_multiple(count);
-}
-
-Cell& Machine::peek() {
-    return operand_stack_.peek();
-}
-
-Cell& Machine::peek_at(size_t index) {
-    return operand_stack_.peek_at(index);
-}
-
 bool Machine::empty() const {
     return operand_stack_.empty();
 }
 
 size_t Machine::stack_size() const {
     return operand_stack_.size();
-}
-
-// Return stack operations.
-void Machine::push_return(Cell value) {
-    return_stack_.push(value);
-}
-
-Cell Machine::pop_return() {
-    return return_stack_.pop();
-}
-
-Cell& Machine::get_return_address() {
-    return return_stack_.offset_from_top(0);
-}
-
-Cell& Machine::get_frame_function_object() {
-    return return_stack_.offset_from_top(1);
 }
 
 Cell& Machine::get_local_variable(int offset) {
@@ -231,6 +194,7 @@ void Machine::execute_syscall(const std::string& name, int nargs) {
 
 FunctionObject Machine::parse_function_object(const std::string& idname, const std::unordered_map<std::string, bool>& deps, const std::string& json_str) {
     ParseFunctionObject parser(*this, idname, deps);
+    nlohmann::json j = nlohmann::json::parse(json_str);
     return parser.parse(json_str);
 }
 
@@ -313,14 +277,6 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
         if constexpr (DEBUG_INSTRUCTIONS) {
             fmt::print("POP_LOCAL\n");
         }
-    //     #ifdef DEBUG_INSTRUCTIONS
-    //     fmt::print("POP_LOCAL\n");
-    //     #endif
-    //     int64_t idx = (pc++)->i64;
-    //     Cell value = pop();
-    //     int nlocals = heap_.get_function_nlocals(current_function_);
-    //     size_t offset = return_stack_.size() - nlocals + idx;
-    //     return_stack_[offset] = value;
         throw std::runtime_error("POP_LOCAL not implemented yet");
         goto *(pc++)->label_addr;
     }
@@ -438,36 +394,18 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
         }
 
         // Get the number of nlocals and nparams from the function object.
-        int nlocals = heap_.get_function_nlocals(func_ptr);
-        int nparams = heap_.get_function_nparams(func_ptr);
+        auto [nextras, nparams] = heap_.get_function_extras_and_params(func_ptr);
 
         if constexpr (TRACE_EXECUTION) {
-            fmt::print("CALL_GLOBAL_COUNTED: nparams = {}, nlocals = {}, arg_count = {}\n", nparams, nlocals, count);
+            fmt::print("CALL_GLOBAL_COUNTED: nparams = {}, nlocals = {}, arg_count = {}\n", nparams, nextras + nparams, count);
         }
 
-        // Build stack frame: [return_address][func_obj][local_0]...[local_nlocals-1]
-        // Initialize remaining locals to nil.
-        for (int i = nparams; i < nlocals; i++)
-        {
-            push_return(SPECIAL_NIL);
-        }
+        // Build stack frame: [return_address][func_obj][local_nlocals-1]...[local_0]
 
-        // Pop parameters from operand stack into temporary buffer.
-        // Operand stack has params in reverse order (last param on top).
-        std::vector<Cell> params(nparams);
-        for (int i = nparams - 1; i >= 0; i--)
-        {
-            params[i] = pop();
-            if constexpr (TRACE_EXECUTION) {
-                fmt::print("Popped param {} = {}\n", i, cell_to_string(params[i]));
-            }   
-        }
+        operand_stack_.move_multiple(count, return_stack_);
         
-        // Push parameters to return stack in correct order (first param at lowest index).
-        for (int i = 0; i < nparams; i++)
-        {
-            push_return(params[i]);
-        }
+        // Initialize remaining locals to nil.
+        return_stack_.push_multiple(SPECIAL_NIL, nextras);
 
         // Save func_obj pointer so RETURN can read nlocals.
         Cell func_cell;
@@ -635,8 +573,7 @@ inline Cell* Machine::call_function_object(Cell* pc, Cell* func_ptr, int arg_cou
 
 
     // Get the number of nlocals and nparams from the function object.
-    int nlocals = heap_.get_function_nlocals(func_ptr);
-    int nparams = heap_.get_function_nparams(func_ptr);
+    auto [nextras, nparams] = heap_.get_function_extras_and_params(func_ptr);
 
     // Check the number of arguments is consistent with nparams.
     if (arg_count != nparams) {
@@ -644,26 +581,14 @@ inline Cell* Machine::call_function_object(Cell* pc, Cell* func_ptr, int arg_cou
             fmt::format("Function expected {} arguments, but got {}", nparams, arg_count));
     }
 
+    // Move n parameters from operand stack to return stack. This means that the
+    // first parameter (#0) is lowest on the return stack, which means we have to
+    // adjust the offset accordingly.
+    operand_stack_.move_multiple(nparams, return_stack_);
+
     // Build stack frame: [return_address][func_obj][local_0]...[local_nlocals-1]
     // Initialize remaining locals to nil.
-    for (int i = nparams; i < nlocals; i++)
-    {
-        push_return(SPECIAL_NIL);
-    }
-
-    // Pop parameters from operand stack into temporary buffer.
-    // Operand stack has params in reverse order (last param on top).
-    std::vector<Cell> params(nparams);
-    for (int i = nparams - 1; i >= 0; i--)
-    {
-        params[i] = pop();
-    }
-    
-    // Push parameters to return stack in correct order (first param at lowest index).
-    for (int i = 0; i < nparams; i++)
-    {
-        push_return(params[i]);
-    }
+    return_stack_.push_multiple(SPECIAL_NIL, nextras);
 
     // Save func_obj pointer so RETURN can read nlocals.
     Cell func_cell;
@@ -706,30 +631,15 @@ Cell * Machine::LaunchInstruction(Cell *pc)
     }
 
     // Get function metadata.
-    int nlocals = heap_.get_function_nlocals(func_obj);
-    int nparams = heap_.get_function_nparams(func_obj);
+    auto [nextras, nparams] = heap_.get_function_extras_and_params(func_obj);
 
-    // Build stack frame: [return_address][func_obj][local_0]...[local_nlocals-1]
+    // Build stack frame: [return_address][func_obj][local_nlocals-1]...[local_0]
+
+    operand_stack_.move_multiple(nparams, return_stack_);
 
     // Initialize remaining locals to nil.
-    for (int i = nparams; i < nlocals; i++)
-    {
-        push_return(SPECIAL_NIL);
-    }
+    return_stack_.push_multiple(SPECIAL_NIL, nextras);
 
-    // Pop parameters from operand stack into temporary buffer.
-    // Operand stack has params in reverse order (last param on top).
-    std::vector<Cell> params(nparams);
-    for (int i = nparams - 1; i >= 0; i--)
-    {
-        params[i] = pop();
-    }
-    
-    // Push parameters to return stack in correct order (first param at lowest index).
-    for (int i = 0; i < nparams; i++)
-    {
-        push_return(params[i]);
-    }
 
     // Save func_obj pointer so RETURN can read nlocals.
     Cell func_cell;

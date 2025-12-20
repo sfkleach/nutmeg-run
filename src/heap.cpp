@@ -127,10 +127,14 @@ Cell* Heap::allocate_function(size_t num_instructions, int nlocals, int nparams)
     Cell* obj_ptr = &base[2];
     obj_ptr[0].ptr = function_datakey_;
     
-    // Pack nlocals and nparams into a single 64-bit field at position 1.
-    // nlocals in lower 32 bits, nparams in upper 32 bits.
-    obj_ptr[1].u64 = (static_cast<uint64_t>(nparams) << 32) | static_cast<uint32_t>(nlocals);
-    
+    // Pack nlocals, nextras and nparams into a single 64-bit field at position 1.
+    {
+        uint64_t sofar = nparams & 0xFFFF;
+        sofar |= (static_cast<uint64_t>(nlocals - nparams) & 0xFFFF) << 16;
+        sofar |= (static_cast<uint64_t>(nlocals) & 0xFFFF) << 32;
+        obj_ptr[1].u64 = sofar;
+    }
+
     return obj_ptr;
 }
 
@@ -145,13 +149,29 @@ Cell* Heap::get_function_code(Cell* obj_ptr) const {
 }
 
 int Heap::get_function_nlocals(Cell* obj_ptr) const {
-    // nlocals is in lower 32 bits of position 1.
-    return static_cast<int>(obj_ptr[1].u64 & 0xFFFFFFFF);
+    // nlocals is in bits 32-47 of position 1.
+    uint64_t packed = obj_ptr[1].u64;
+    return static_cast<int>((packed >> 32) & 0xFFFF);
 }
 
 int Heap::get_function_nparams(Cell* obj_ptr) const {
-    // nparams is in upper 32 bits of position 1.
-    return static_cast<int>(obj_ptr[1].u64 >> 32);
+    // nparams is in bits 0-15 of position 1.
+    uint64_t packed = obj_ptr[1].u64;
+    return static_cast<int>(packed & 0xFFFF);
+}
+
+int Heap::get_function_nextras(Cell* obj_ptr) const {
+    // nextras is in bits 31-16 of position 1.
+    uint64_t packed = obj_ptr[1].u64;
+    return static_cast<int>((packed >> 16) & 0xFFFF);
+}
+
+std::pair<int, int> Heap::get_function_extras_and_params(Cell* obj_ptr) const {
+    // Both values are packed in position 1: nlocals in lower 32 bits, nparams in upper 32 bits.
+    uint64_t packed = obj_ptr[1].u64;
+    int nparams = static_cast<int>(packed & 0xFFFF);
+    int nextras = static_cast<int>((packed >> 16) & 0xFFFF);
+    return {nextras, nparams};
 }
 
 ObjectBuilder::ObjectBuilder(Pool* pool)

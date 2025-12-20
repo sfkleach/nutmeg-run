@@ -22,9 +22,8 @@ FunctionObject ParseFunctionObject::parse(const std::string& json_str) {
     try {
         nlohmann::json j = nlohmann::json::parse(json_str);
         
-        FunctionObject func;
-        func.nlocals = j.at("nlocals").get<int>();
-        func.nparams = j.at("nparams").get<int>();
+        func_.nlocals = j.at("nlocals").get<int>();
+        func_.nparams = j.at("nparams").get<int>();
         
         // Compile instructions to threaded code.
         for (const auto& inst_json : j.at("instructions")) {
@@ -67,7 +66,7 @@ FunctionObject ParseFunctionObject::parse(const std::string& json_str) {
                 inst.ivalue = inst_json.at("ivalue").get<int64_t>();
             }
             
-            plant_instruction(func, inst);
+            plant_instruction(func_, inst);
         }
         
         validate_forward_references();
@@ -75,13 +74,13 @@ FunctionObject ParseFunctionObject::parse(const std::string& json_str) {
         // Add HALT at the end.
         Cell halt_word;
         halt_word.label_addr = machine_.get_opcode_map().at(Opcode::HALT);
-        func.code.push_back(halt_word);
+        func_.code.push_back(halt_word);
         
         if constexpr (TRACE_PLANT_INSTRUCTIONS) {
             fmt::print("End of instructions for function: {}\n", idname_);
         }
         
-        return func;
+        return func_;
     } catch (const nlohmann::json::exception& e) {
         throw std::runtime_error(fmt::format("JSON parsing error: {}", e.what()));
     }
@@ -241,7 +240,7 @@ void ParseFunctionObject::plant_pop_local(FunctionObject& func, const Instructio
 
 void ParseFunctionObject::plant_push_local(FunctionObject& func, const Instruction& inst) {
     Cell operand;
-    operand.i64 = inst.calc_offset();
+    operand.i64 = calc_offset(inst);
     func.code.push_back(operand);
 }
 
@@ -283,7 +282,7 @@ void ParseFunctionObject::plant_call_global_counted(FunctionObject& func, const 
             fmt::format("CALL_GLOBAL_COUNTED: undefined global function: {}", inst.name.value()));
     }
     
-    Cell index_operand = make_raw_i64(inst.calc_offset());
+    Cell index_operand = make_raw_i64(calc_offset(inst));
     func.code.push_back(index_operand);
     
     Cell func_operand;
@@ -303,7 +302,7 @@ void ParseFunctionObject::plant_syscall_counted(FunctionObject& func, const Inst
         throw std::runtime_error("SYSCALL_COUNTED requires a name field");
     }
     
-    Cell index_operand = make_raw_i64(inst.calc_offset());
+    Cell index_operand = make_raw_i64(calc_offset(inst));
     func.code.push_back(index_operand);
     
     auto it = sysfunctions_table.find(inst.name.value());
@@ -324,7 +323,7 @@ void ParseFunctionObject::plant_stack_length(FunctionObject& func, const Instruc
     if (!inst.index.has_value()) {
         throw std::runtime_error("STACK_LENGTH requires an index field");
     }
-    int offset = inst.calc_offset();
+    int offset = calc_offset(inst);
     Cell c = make_raw_i64(offset);
     func.code.push_back(c);
 }
@@ -337,7 +336,7 @@ void ParseFunctionObject::plant_check_bool(FunctionObject& func, const Instructi
     if (!inst.index.has_value()) {
         throw std::runtime_error("CHECK_BOOL requires an index field");
     }
-    int offset = inst.calc_offset();
+    int offset = calc_offset(inst);
     Cell c = make_raw_i64(offset);
     func.code.push_back(c);
 }
@@ -409,7 +408,7 @@ void ParseFunctionObject::plant_done(FunctionObject& func, const Instruction& in
             fmt::format("DONE: undefined global function: {}", inst.name.value()));
     }
     
-    Cell index_operand = make_raw_i64(inst.calc_offset());
+    Cell index_operand = make_raw_i64(calc_offset(inst));
     func.code.push_back(index_operand);
     
     Cell func_operand;
@@ -426,6 +425,10 @@ void ParseFunctionObject::validate_forward_references() {
         }
         throw std::runtime_error(fmt::format("Unresolved label references: {}", unresolved));
     }
+}
+
+int ParseFunctionObject::calc_offset(const Instruction& inst) {
+    return inst.calc_offset(func_.nlocals);
 }
 
 } // namespace nutmeg
