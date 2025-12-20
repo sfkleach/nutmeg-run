@@ -7,6 +7,10 @@
 
 namespace nutmeg {
 
+// Enable bounds checking for stack operations.
+// Set to false for maximum performance in production builds.
+constexpr bool ENABLE_STACK_CHECKS = true;
+
 // Lightweight stack implementation for VM stacks.
 // Uses a fixed-size backing array with pointer-based operations.
 // Much more efficient than std::vector for push/pop at the end.
@@ -40,32 +44,40 @@ public:
 
     // Push a value onto the stack.
     inline void push(Cell value) {
-        if (top_ >= limit_) {
-            throw std::runtime_error("Stack overflow");
+        if constexpr (ENABLE_STACK_CHECKS) {
+            if (top_ >= limit_) {
+                throw std::runtime_error("Stack overflow");
+            }
         }
         *top_++ = value;
     }
 
     // Pop a value from the stack.
     inline Cell pop() {
-        if (top_ <= base_) {
-            throw std::runtime_error("Stack underflow");
+        if constexpr (ENABLE_STACK_CHECKS) {
+            if (top_ <= base_) {
+                throw std::runtime_error("Stack underflow");
+            }
         }
         return *--top_;
     }
 
     // Peek at the top value without removing it.
     inline Cell& peek() {
-        if (top_ <= base_) {
-            throw std::runtime_error("Stack is empty");
+        if constexpr (ENABLE_STACK_CHECKS) {
+            if (top_ <= base_) {
+                throw std::runtime_error("Stack is empty");
+            }
         }
         return *(top_ - 1);
     }
 
     // Peek at an arbitrary position (0 = bottom, size()-1 = top).
     inline Cell& peek_at(size_t index) {
-        if (index >= size()) {
-            throw std::runtime_error("Stack index out of bounds");
+        if constexpr (ENABLE_STACK_CHECKS) {
+            if (index >= size()) {
+                throw std::runtime_error("Stack index out of bounds");
+            }
         }
         return base_[index];
     }
@@ -82,16 +94,20 @@ public:
 
     // Pop multiple values at once.
     inline void pop_multiple(size_t count) {
-        if (top_ - count < base_) {
-            throw std::runtime_error("Stack underflow");
+        if constexpr (ENABLE_STACK_CHECKS) {
+            if (top_ - count < base_) {
+                throw std::runtime_error("Stack underflow");
+            }
         }
         top_ -= count;
     }
 
     // Resize the stack (for return stack frame management).
     inline void resize(size_t new_size) {
-        if (new_size > capacity_) {
-            throw std::runtime_error("Stack resize exceeds capacity");
+        if constexpr (ENABLE_STACK_CHECKS) {
+            if (new_size > capacity_) {
+                throw std::runtime_error("Stack resize exceeds capacity");
+            }
         }
         top_ = base_ + new_size;
     }
@@ -99,8 +115,10 @@ public:
     // Get reference to element at offset from top.
     // offset_from_top(0) = top element, offset_from_top(1) = second from top, etc.
     inline Cell& offset_from_top(size_t offset) {
-        if (top_ - offset <= base_) {
-            throw std::runtime_error("Stack offset out of bounds");
+        if constexpr (ENABLE_STACK_CHECKS) {
+            if (top_ - offset <= base_) {
+                throw std::runtime_error("Stack offset out of bounds");
+            }
         }
         return *(top_ - offset - 1);
     }
