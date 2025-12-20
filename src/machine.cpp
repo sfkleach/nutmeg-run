@@ -25,37 +25,23 @@ Machine::~Machine() {
 
 // Stack operations.
 void Machine::push(Cell value) {
-    operand_stack_.push_back(value);
+    operand_stack_.push(value);
 }
 
 Cell Machine::pop() {
-    if (operand_stack_.empty()) {
-        throw std::runtime_error("Stack underflow");
-    }
-    Cell value = operand_stack_.back();
-    operand_stack_.pop_back();
-    return value;
+    return operand_stack_.pop();
 }
 
 void Machine::pop_multiple(size_t count) {
-    if (operand_stack_.size() < count) {
-        throw std::runtime_error("Stack underflow");
-    }
-    operand_stack_.resize(operand_stack_.size() - count);
+    operand_stack_.pop_multiple(count);
 }
 
 Cell& Machine::peek() {
-    if (operand_stack_.empty()) {
-        throw std::runtime_error("Stack is empty");
-    }
-    return operand_stack_.back();
+    return operand_stack_.peek();
 }
 
 Cell& Machine::peek_at(size_t index) {
-    if (index >= operand_stack_.size()) {
-        throw std::runtime_error("Stack index out of bounds");
-    }
-    return operand_stack_[index];
+    return operand_stack_.peek_at(index);
 }
 
 bool Machine::empty() const {
@@ -68,30 +54,25 @@ size_t Machine::stack_size() const {
 
 // Return stack operations.
 void Machine::push_return(Cell value) {
-    return_stack_.push_back(value);
+    return_stack_.push(value);
 }
 
 Cell Machine::pop_return() {
-    if (return_stack_.empty()) {
-        throw std::runtime_error("Return stack underflow");
-    }
-    Cell value = return_stack_.back();
-    return_stack_.pop_back();
-    return value;
+    return return_stack_.pop();
 }
 
 Cell& Machine::get_return_address() {
-    return return_stack_[return_stack_.size() -1];
+    return return_stack_.offset_from_top(0);
 }
 
 Cell& Machine::get_frame_function_object() {
-    return return_stack_[return_stack_.size() -2];
+    return return_stack_.offset_from_top(1);
 }
 
 Cell& Machine::get_local_variable(int offset) {
     // Note that the -3 additional offset is rolled into the supplied offset
     // by the loader.
-    return return_stack_[return_stack_.size() - offset];
+    return return_stack_.offset_from_top(offset - 1);
 }
 
 // Global dictionary operations.
@@ -349,7 +330,7 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
         if constexpr (DEBUG_INSTRUCTIONS) {
             fmt::print("PUSH_LOCAL #{}\n", offset);
         }
-        operand_stack_.push_back(get_local_variable(offset));
+        operand_stack_.push(get_local_variable(offset));
         goto *(pc++)->label_addr;
     }
 

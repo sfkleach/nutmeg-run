@@ -4,6 +4,7 @@
 #include "value.hpp"
 #include "function_object.hpp"
 #include "heap.hpp"
+#include "cell_stack.hpp"
 #include <vector>
 #include <unordered_map>
 #include <string>
@@ -23,10 +24,10 @@ public:
 class Machine {
 private:
     // Operand stack (main data stack).
-    std::vector<Cell> operand_stack_;
+    CellStack operand_stack_;
 
     // Return stack (for function calls and local variables).
-    std::vector<Cell> return_stack_;
+    CellStack return_stack_;
 
     // Global dictionary mapping names to values via indirection.
     // Indirection ensures stable pointers that won't be invalidated by map resizing.
