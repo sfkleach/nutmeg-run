@@ -16,6 +16,7 @@ static const std::unordered_map<std::string, std::pair<Opcode, Opcode>> string_t
     {"syscall.counted", {Opcode::SYSCALL_COUNTED, Opcode::SYSCALL_COUNTED}},
     {"stack.length", {Opcode::STACK_LENGTH, Opcode::STACK_LENGTH}},
     {"check.bool", {Opcode::CHECK_BOOL, Opcode::CHECK_BOOL}},
+    {"check.count.is.1", {Opcode::CHECK_COUNT_IS_1, Opcode::CHECK_COUNT_IS_1}},
     {"label", {Opcode::LABEL, Opcode::LABEL}},
     {"goto", {Opcode::GOTO, Opcode::GOTO}},
     {"if.not", {Opcode::IF_NOT, Opcode::IF_NOT}},
@@ -46,6 +47,7 @@ const char* opcode_to_string(Opcode opcode) {
         case Opcode::SYSCALL_COUNTED: return "SYSCALL_COUNTED";
         case Opcode::STACK_LENGTH: return "STACK_LENGTH";
         case Opcode::CHECK_BOOL: return "CHECK_BOOL";
+        case Opcode::CHECK_COUNT_IS_1: return "CHECK_COUNT_IS_1";
         case Opcode::LABEL: return "LABEL";
         case Opcode::GOTO: return "GOTO";
         case Opcode::IF_NOT: return "IF_NOT";

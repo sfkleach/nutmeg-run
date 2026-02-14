@@ -18,26 +18,26 @@ FunctionObject ParseFunctionObject::parse(const std::string& json_str) {
     if constexpr (TRACE_PLANT_INSTRUCTIONS) {
         fmt::print("Planting instructions for function: {}\n", idname_);
     }
-    
+
     try {
         nlohmann::json j = nlohmann::json::parse(json_str);
-        
+
         func_.nlocals = j.at("nlocals").get<int>();
         func_.nparams = j.at("nparams").get<int>();
-        
+
         // Compile instructions to threaded code.
         for (const auto& inst_json : j.at("instructions")) {
             if constexpr (TRACE_PLANT_INSTRUCTIONS) {
                 fmt::print("Processing instruction JSON: {}\n", inst_json.dump());
             }
-            
+
             Instruction inst;
             inst.type = inst_json.at("type").get<std::string>();
             if (inst_json.contains("name")) {
                 inst.name = inst_json.at("name").get<std::string>();
             }
             auto opcodes = string_to_opcode(inst.type);
-            
+
             bool is_lazy = false;
             if (inst.name.has_value()) {
                 auto dep_it = deps_.find(inst.name.value());
@@ -54,7 +54,7 @@ FunctionObject ParseFunctionObject::parse(const std::string& json_str) {
                 }
             }
             inst.opcode = is_lazy ? opcodes.second : opcodes.first;
-            
+
             // Optional fields.
             if (inst_json.contains("index")) {
                 inst.index = inst_json.at("index").get<int>();
@@ -65,21 +65,21 @@ FunctionObject ParseFunctionObject::parse(const std::string& json_str) {
             if (inst_json.contains("ivalue")) {
                 inst.ivalue = inst_json.at("ivalue").get<int64_t>();
             }
-            
+
             plant_instruction(func_, inst);
         }
-        
+
         validate_forward_references();
-        
+
         // Add HALT at the end.
         Cell halt_word;
         halt_word.label_addr = machine_.get_opcode_map().at(Opcode::HALT);
         func_.code.push_back(halt_word);
-        
+
         if constexpr (TRACE_PLANT_INSTRUCTIONS) {
             fmt::print("End of instructions for function: {}\n", idname_);
         }
-        
+
         return func_;
     } catch (const nlohmann::json::exception& e) {
         throw std::runtime_error(fmt::format("JSON parsing error: {}", e.what()));
@@ -92,7 +92,7 @@ void ParseFunctionObject::plant_instruction(FunctionObject& func, const Instruct
         plant_label(func, inst);
         return;
     }
-    
+
     // Emit label address for the instruction handler.
     auto& opcode_map = machine_.get_opcode_map();
     auto opcode_it = opcode_map.find(inst.opcode);
@@ -102,7 +102,7 @@ void ParseFunctionObject::plant_instruction(FunctionObject& func, const Instruct
     Cell label_word;
     label_word.label_addr = opcode_it->second;
     func.code.push_back(label_word);
-    
+
     // Emit instruction-specific operands.
     if constexpr (TRACE_PLANT_INSTRUCTIONS) {
         fmt::print("Processing operands for instruction: {}\n", opcode_to_string(inst.opcode));
@@ -155,7 +155,7 @@ void ParseFunctionObject::plant_instruction(FunctionObject& func, const Instruct
             plant_done(func, inst);
             break;
         default:
-            throw std::runtime_error(fmt::format("Unhandled opcode during compilation: {}", 
+            throw std::runtime_error(fmt::format("Unhandled opcode during compilation: {}",
                                                 static_cast<int>(inst.opcode)));
     }
 }
@@ -168,15 +168,15 @@ void ParseFunctionObject::plant_label(FunctionObject& func, const Instruction& i
         throw std::runtime_error("LABEL requires a value field");
     }
     std::string label_name = inst.value.value();
-    
+
     // Record the current position as the target for this label.
     size_t label_position = func.code.size();
     label_map_[label_name] = label_position;
-    
+
     if constexpr (TRACE_PLANT_INSTRUCTIONS) {
         fmt::print("  Label '{}' defined at position {}\n", label_name, label_position);
     }
-    
+
     // Resolve any forward references to this label.
     auto fwd_it = forward_refs_.find(label_name);
     if (fwd_it != forward_refs_.end()) {
@@ -199,7 +199,7 @@ void ParseFunctionObject::plant_push_int(FunctionObject& func, const Instruction
     if constexpr (TRACE_PLANT_INSTRUCTIONS) {
         fmt::print("Plant: PUSH_INT {}\n", int_value);
     }
-    
+
     Cell operand = make_tagged_int(int_value);
     func.code.push_back(operand);
 }
@@ -220,7 +220,7 @@ void ParseFunctionObject::plant_push_bool(FunctionObject& func, const Instructio
     if constexpr (TRACE_PLANT_INSTRUCTIONS) {
         fmt::print("Plant: PUSH_BOOL {}\n", bool_value);
     }
-    
+
     Cell operand = make_bool(bool_value);
     func.code.push_back(operand);
 }
@@ -248,17 +248,17 @@ void ParseFunctionObject::plant_push_global(FunctionObject& func, const Instruct
     if constexpr (TRACE_PLANT_INSTRUCTIONS) {
         fmt::print("Plant: PUSH_GLOBAL\n");
     }
-    
+
     if (!inst.name.has_value()) {
         throw std::runtime_error("PUSH_GLOBAL requires a name field");
     }
-    
+
     Ident* ident_ptr = machine_.lookup_ident(inst.name.value());
     if (ident_ptr == nullptr) {
         throw std::runtime_error(
             fmt::format("PUSH_GLOBAL: undefined global variable: {}", inst.name.value()));
     }
-    
+
     Cell ident_operand;
     ident_operand.ptr = static_cast<void*>(ident_ptr);
     func.code.push_back(ident_operand);
@@ -268,23 +268,23 @@ void ParseFunctionObject::plant_call_global_counted(FunctionObject& func, const 
     if constexpr (TRACE_PLANT_INSTRUCTIONS) {
         fmt::print("Plant: (L_)CALL_GLOBAL_COUNTED\n");
     }
-    
+
     if (!inst.index.has_value()) {
         throw std::runtime_error("CALL_GLOBAL_COUNTED requires an index field");
     }
     if (!inst.name.has_value()) {
         throw std::runtime_error("CALL_GLOBAL_COUNTED requires a name field");
     }
-    
+
     Ident* ident_ptr = machine_.lookup_ident(inst.name.value());
     if (ident_ptr == nullptr) {
         throw std::runtime_error(
             fmt::format("CALL_GLOBAL_COUNTED: undefined global function: {}", inst.name.value()));
     }
-    
+
     Cell index_operand = make_raw_i64(calc_offset(inst));
     func.code.push_back(index_operand);
-    
+
     Cell func_operand;
     func_operand.ptr = static_cast<void*>(ident_ptr);
     func.code.push_back(func_operand);
@@ -294,17 +294,17 @@ void ParseFunctionObject::plant_syscall_counted(FunctionObject& func, const Inst
     if constexpr (TRACE_PLANT_INSTRUCTIONS) {
         fmt::print("Plant: SYSCALL_COUNTED\n");
     }
-    
+
     if (!inst.index.has_value()) {
         throw std::runtime_error("SYSCALL_COUNTED requires an index field");
     }
     if (!inst.name.has_value()) {
         throw std::runtime_error("SYSCALL_COUNTED requires a name field");
     }
-    
+
     Cell index_operand = make_raw_i64(calc_offset(inst));
     func.code.push_back(index_operand);
-    
+
     auto it = sysfunctions_table.find(inst.name.value());
     if (it == sysfunctions_table.end()) {
         throw std::runtime_error(fmt::format("Unknown sys-function: {}", inst.name.value()));
@@ -319,7 +319,7 @@ void ParseFunctionObject::plant_stack_length(FunctionObject& func, const Instruc
     if constexpr (TRACE_PLANT_INSTRUCTIONS) {
         fmt::print("Plant: STACK_LENGTH\n");
     }
-    
+
     if (!inst.index.has_value()) {
         throw std::runtime_error("STACK_LENGTH requires an index field");
     }
@@ -332,9 +332,22 @@ void ParseFunctionObject::plant_check_bool(FunctionObject& func, const Instructi
     if constexpr (TRACE_PLANT_INSTRUCTIONS) {
         fmt::print("Plant: CHECK_BOOL\n");
     }
-    
+
     if (!inst.index.has_value()) {
         throw std::runtime_error("CHECK_BOOL requires an index field");
+    }
+    int offset = calc_offset(inst);
+    Cell c = make_raw_i64(offset);
+    func.code.push_back(c);
+}
+
+void ParseFunctionObject::plant_check_count_is_1(FunctionObject& func, const Instruction& inst) {
+    if constexpr (TRACE_PLANT_INSTRUCTIONS) {
+        fmt::print("Plant: CHECK_COUNT_IS_1\n");
+    }
+
+    if (!inst.index.has_value()) {
+        throw std::runtime_error("CHECK_COUNT_IS_1 requires an index field");
     }
     int offset = calc_offset(inst);
     Cell c = make_raw_i64(offset);
@@ -345,7 +358,7 @@ void ParseFunctionObject::plant_goto(FunctionObject& func, const Instruction& in
     if constexpr (TRACE_PLANT_INSTRUCTIONS) {
         fmt::print("Plant: GOTO\n");
     }
-    
+
     if (!inst.value.has_value()) {
         throw std::runtime_error("GOTO requires a value field");
     }
@@ -356,7 +369,7 @@ void ParseFunctionObject::plant_if_not(FunctionObject& func, const Instruction& 
     if constexpr (TRACE_PLANT_INSTRUCTIONS) {
         fmt::print("Plant: IF_NOT\n");
     }
-    
+
     if (!inst.value.has_value()) {
         throw std::runtime_error("IF_NOT requires a value field");
     }
@@ -369,7 +382,7 @@ void ParseFunctionObject::plant_jump_instruction(FunctionObject& func, const std
     Cell offset_cell;
     offset_cell.i64 = 0;  // Placeholder.
     func.code.push_back(offset_cell);
-    
+
     // Check if the label has already been defined (backward jump).
     auto label_it = label_map_.find(label_name);
     if (label_it != label_map_.end()) {
@@ -401,16 +414,16 @@ void ParseFunctionObject::plant_done(FunctionObject& func, const Instruction& in
     if (!inst.name.has_value()) {
         throw std::runtime_error("DONE requires a name field");
     }
-    
+
     Ident* ident_ptr = machine_.lookup_ident(inst.name.value());
     if (ident_ptr == nullptr) {
         throw std::runtime_error(
             fmt::format("DONE: undefined global function: {}", inst.name.value()));
     }
-    
+
     Cell index_operand = make_raw_i64(calc_offset(inst));
     func.code.push_back(index_operand);
-    
+
     Cell func_operand;
     func_operand.ptr = static_cast<void*>(ident_ptr);
     func.code.push_back(func_operand);
