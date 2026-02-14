@@ -3,6 +3,7 @@
 #include <vector>
 #include <optional>
 #include <cstring>
+#include <cstdlib>
 #include <unordered_set>
 #include <chrono>
 #include "bundle_reader.hpp"
@@ -16,6 +17,24 @@ struct CommandLineArgs {
     std::vector<std::string> program_args;
 };
 
+// Display help information and exit successfully.
+void print_help() {
+    fmt::print("Usage: nutmeg-run [OPTIONS] BUNDLE_FILE [ARGUMENTS...]\n");
+    fmt::print("\n");
+    fmt::print("Execute a Nutmeg bundle file.\n");
+    fmt::print("\n");
+    fmt::print("Options:\n");
+    fmt::print("  -h, --help              Display this help message and exit\n");
+    fmt::print("  -e NAME, -e=NAME        Specify the entry point to invoke\n");
+    fmt::print("  --entry-point NAME      Specify the entry point to invoke\n");
+    fmt::print("  --entry-point=NAME      Specify the entry point to invoke\n");
+    fmt::print("\n");
+    fmt::print("Arguments:\n");
+    fmt::print("  BUNDLE_FILE             The Nutmeg bundle file to execute (required)\n");
+    fmt::print("  ARGUMENTS...            Arguments passed to the program\n");
+    std::exit(EXIT_SUCCESS);
+}
+
 // Parse command-line arguments according to: nutmeg-run [OPTIONS] BUNDLE_FILE [ARGUMENTS...].
 CommandLineArgs parse_args(int argc, char* argv[]) {
     CommandLineArgs args;
@@ -25,8 +44,12 @@ CommandLineArgs parse_args(int argc, char* argv[]) {
     while (i < argc) {
         std::string arg = argv[i];
 
+        // Check for help option.
+        if (arg == "-h" || arg == "--help") {
+            print_help();
+        }
         // Check for --entry-point=NAME (optional form).
-        if (arg.rfind("--entry-point=", 0) == 0) {
+        else if (arg.rfind("--entry-point=", 0) == 0) {
             args.entry_point = arg.substr(14);  // Length of "--entry-point=".
             i++;
         }
@@ -34,7 +57,7 @@ CommandLineArgs parse_args(int argc, char* argv[]) {
         else if (arg == "--entry-point") {
             if (i + 1 >= argc) {
                 fmt::print(stderr, "Error: --entry-point option requires an argument\n");
-                std::exit(1);
+                std::exit(EXIT_FAILURE);
             }
             args.entry_point = argv[i + 1];
             i += 2;
@@ -43,7 +66,7 @@ CommandLineArgs parse_args(int argc, char* argv[]) {
         else if (arg == "-e") {
             if (i + 1 >= argc) {
                 fmt::print(stderr, "Error: -e option requires an argument\n");
-                std::exit(1);
+                std::exit(EXIT_FAILURE);
             }
             args.entry_point = argv[i + 1];
             i += 2;
@@ -59,7 +82,7 @@ CommandLineArgs parse_args(int argc, char* argv[]) {
         }
         else {
             fmt::print(stderr, "Error: Unknown option '{}'\n", arg);
-            std::exit(1);
+            std::exit(EXIT_FAILURE);
         }
     }
 
@@ -70,7 +93,7 @@ CommandLineArgs parse_args(int argc, char* argv[]) {
         fmt::print(stderr, "Options:\n");
         fmt::print(stderr, "  -e NAME, -e=NAME, --entry-point NAME, --entry-point=NAME\n");
         fmt::print(stderr, "                          Specify the entry point to invoke\n");
-        std::exit(1);
+        std::exit(EXIT_FAILURE);
     }
     args.bundle_file = argv[i++];
 
@@ -98,14 +121,14 @@ int main(int argc, char* argv[]) {
             auto entry_points = reader.get_entry_points();
             if (entry_points.empty()) {
                 fmt::print(stderr, "Error: No entry points found in bundle\n");
-                return 1;
+                return EXIT_FAILURE;
             }
             if (entry_points.size() > 1) {
                 fmt::print(stderr, "Error: Multiple entry points found, please specify one with --entry-point:\n");
                 for (const auto& ep : entry_points) {
                     fmt::print(stderr, "  {}\n", ep);
                 }
-                return 1;
+                return EXIT_FAILURE;
             }
             entry_point_name = entry_points[0];
         }
@@ -154,18 +177,18 @@ int main(int argc, char* argv[]) {
         auto start_time = std::chrono::high_resolution_clock::now();
         machine.execute(entry_func_ptr);
         auto end_time = std::chrono::high_resolution_clock::now();
-        
+
         if constexpr (nutmeg::TRACE_TIMES) {
             auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time);
-            fmt::print("Execution time: {}.{:06d} seconds\n", 
-                       duration.count() / 1000000, 
+            fmt::print("Execution time: {}.{:06d} seconds\n",
+                       duration.count() / 1000000,
                        duration.count() % 1000000);
         }
 
-        return 0;
+        return EXIT_SUCCESS;
 
     } catch (const std::exception& e) {
         fmt::print(stderr, "Error: {}\n", e.what());
-        return 1;
+        return EXIT_FAILURE;
     }
 }
