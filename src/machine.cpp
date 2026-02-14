@@ -1,18 +1,12 @@
 #include "machine.hpp"
 #include "instruction.hpp"
 #include "sysfunctions.hpp"
+#include "parse_function_object.hpp"
+#include "trace.hpp"
 #include <nlohmann/json.hpp>
 #include <stdexcept>
 #include <fmt/core.h>
 #include <iostream>
-
-#define DEBUG_INSTRUCTIONS
-// #define DEBUG_INSTRUCTIONS_DETAIL
-#define TRACE_PLANT_INSTRUCTIONS
-// #define TRACE_CODEGEN
-// #define TRACE_CODEGEN_DETAILED
-#define EXTRA_CHECKS
-#define TRACE_EXECUTION
 
 namespace nutmeg {
 
@@ -30,40 +24,6 @@ Machine::~Machine() {
 }
 
 // Stack operations.
-void Machine::push(Cell value) {
-    operand_stack_.push_back(value);
-}
-
-Cell Machine::pop() {
-    if (operand_stack_.empty()) {
-        throw std::runtime_error("Stack underflow");
-    }
-    Cell value = operand_stack_.back();
-    operand_stack_.pop_back();
-    return value;
-}
-
-void Machine::pop_multiple(size_t count) {
-    if (operand_stack_.size() < count) {
-        throw std::runtime_error("Stack underflow");
-    }
-    operand_stack_.resize(operand_stack_.size() - count);
-}
-
-Cell& Machine::peek() {
-    if (operand_stack_.empty()) {
-        throw std::runtime_error("Stack is empty");
-    }
-    return operand_stack_.back();
-}
-
-Cell& Machine::peek_at(size_t index) {
-    if (index >= operand_stack_.size()) {
-        throw std::runtime_error("Stack index out of bounds");
-    }
-    return operand_stack_[index];
-}
-
 bool Machine::empty() const {
     return operand_stack_.empty();
 }
@@ -72,39 +32,17 @@ size_t Machine::stack_size() const {
     return operand_stack_.size();
 }
 
-// Return stack operations.
-void Machine::push_return(Cell value) {
-    return_stack_.push_back(value);
-}
-
-Cell Machine::pop_return() {
-    if (return_stack_.empty()) {
-        throw std::runtime_error("Return stack underflow");
-    }
-    Cell value = return_stack_.back();
-    return_stack_.pop_back();
-    return value;
-}
-
-Cell& Machine::get_return_address() {
-    return return_stack_[return_stack_.size() -1];
-}
-
-Cell& Machine::get_frame_function_object() {
-    return return_stack_[return_stack_.size() -2];
-}
-
 Cell& Machine::get_local_variable(int offset) {
     // Note that the -3 additional offset is rolled into the supplied offset
     // by the loader.
-    return return_stack_[return_stack_.size() - offset];
+    return return_stack_.offset_from_top(offset - 1);
 }
 
 // Global dictionary operations.
 void Machine::define_global(const std::string& name, Cell value, bool lazy) {
-    #ifdef TRACE_CODEGEN
-    fmt::print("DEFINING global: {}\n", name);
-    #endif
+    if constexpr (TRACE_CODEGEN) {
+        fmt::print("DEFINING global: {}\n", name);
+    }
     auto it = globals_.find(name);
     if (it == globals_.end()) {
         // Create new global.
@@ -131,12 +69,12 @@ bool Machine::has_global(const std::string& name) const {
 }
 
 Cell* Machine::get_global_cell_ptr(const std::string& name) {
-    #ifdef TRACE_CODEGEN_DETAILED
-    fmt::print("Available globals:\n");
-    for (const auto& pair : globals_) {
-        fmt::print("  {}\n", pair.first);
+    if constexpr (TRACE_CODEGEN_DETAILED) {
+        fmt::print("Available globals:\n");
+        for (const auto& pair : globals_) {
+            fmt::print("  {}\n", pair.first);
+        }
     }
-    #endif
     auto it = globals_.find(name);
     if (it == globals_.end()) {
         throw std::runtime_error(fmt::format("Undefined global: {}", name));
@@ -193,22 +131,22 @@ Cell* Machine::get_function_ptr(Cell cell) {
 // Execution entry point - only used for initial launch from main and tests.
 // Creates a minimal launcher: LAUNCH HALT.
 void Machine::execute(Cell* func_obj) {
-    #ifdef TRACE_CODEGEN
-    fmt::print("execute() called\n");
-    #endif
+    if constexpr (TRACE_CODEGEN) {
+        fmt::print("execute() called\n");
+    }
 
     // Display the structure of the function object for debugging.
-    #ifdef TRACE_CODEGEN_DETAILED
-    fmt::print("Length of instructions: {}\n", as_detagged_int(func_obj[-2]));
-    fmt::print("T-block length: {}\n", as_detagged_int(func_obj[-1]));
-    fmt::print("FunctionDataKey: {}\n", static_cast<void*>(func_obj[0].ptr));
-    fmt::print("NLocals: {}\n", heap_.get_function_nlocals(func_obj));
-    fmt::print("NParams: {}\n", heap_.get_function_nparams(func_obj));
-    for (int i = 0; i < as_detagged_int(func_obj[-2]); i++) {
-        Cell instr = heap_.get_function_code(func_obj)[i];
-        fmt::print("Instruction[{}]: label_addr={}\n", i, static_cast<void*>(instr.label_addr));
+    if constexpr (TRACE_CODEGEN_DETAILED) {
+        fmt::print("Length of instructions: {}\n", as_detagged_int(func_obj[-2]));
+        fmt::print("T-block length: {}\n", as_detagged_int(func_obj[-1]));
+        fmt::print("FunctionDataKey: {}\n", static_cast<void*>(func_obj[0].ptr));
+        fmt::print("NLocals: {}\n", heap_.get_function_nlocals(func_obj));
+        fmt::print("NParams: {}\n", heap_.get_function_nparams(func_obj));
+        for (int i = 0; i < as_detagged_int(func_obj[-2]); i++) {
+            Cell instr = heap_.get_function_code(func_obj)[i];
+            fmt::print("Instruction[{}]: label_addr={}\n", i, static_cast<void*>(instr.label_addr));
+        }
     }
-    #endif
 
     // Create tiny launcher code.
     std::vector<Cell> launcher(3);
@@ -216,13 +154,13 @@ void Machine::execute(Cell* func_obj) {
     launcher[1].ptr = func_obj;
     launcher[2].label_addr = opcode_map_[Opcode::HALT];
 
-    #ifdef TRACE_CODEGEN_DETAILED
-    fmt::print("About to call threaded_impl\n");
-    #endif
+    if constexpr (TRACE_CODEGEN_DETAILED) {
+        fmt::print("About to call threaded_impl\n");
+    }
     threaded_impl(&launcher, false);
-    #ifdef TRACE_CODEGEN_DETAILED
-    fmt::print("Returned from threaded_impl\n");
-    #endif
+    if constexpr (TRACE_CODEGEN_DETAILED) {
+        fmt::print("Returned from threaded_impl\n");
+    }
 }
 
 void Machine::execute_syscall(const std::string& name, int nargs) {
@@ -255,316 +193,9 @@ void Machine::execute_syscall(const std::string& name, int nargs) {
 }
 
 FunctionObject Machine::parse_function_object(const std::string& idname, const std::unordered_map<std::string, bool>& deps, const std::string& json_str) {
-    #ifdef TRACE_PLANT_INSTRUCTIONS
-    fmt::print("Planting instructions for function: {}\n", idname);
-    #endif
-    try {
-        nlohmann::json j = nlohmann::json::parse(json_str);
-
-        FunctionObject func;
-        func.nlocals = j.at("nlocals").get<int>();
-        func.nparams = j.at("nparams").get<int>();
-
-        // Compile instructions to threaded code.
-        for (const auto& inst_json : j.at("instructions")) {
-
-            fmt::print("Processing instruction JSON: {}\n", inst_json.dump());
-
-            Instruction inst;
-            inst.type = inst_json.at("type").get<std::string>();
-            if (inst_json.contains("name")) {
-                inst.name = inst_json.at("name").get<std::string>();
-            }
-            auto opcodes = string_to_opcode(inst.type);
-
-            bool is_lazy = false;
-            if (inst.name.has_value()) {
-                auto dep_it = deps.find(inst.name.value());
-                if (dep_it != deps.end()) {
-                    is_lazy = dep_it->second;
-                }
-                fmt::print("Instruction '{}' refers to global '{}', lazy={}\n",
-                           inst.type, inst.name.value(), is_lazy);
-            } else {
-                fmt::print("Instruction '{}' has no global name\n", inst.type);
-            }
-            inst.opcode = is_lazy ? opcodes.second : opcodes.first;
-
-            #ifdef TRACE_CODEGEN_DETAILED
-            fmt::print("  Parsing instruction: {} of type {}\n", inst.type, static_cast<int>(inst.opcode));
-            #endif
-
-            // Optional fields.
-            if (inst_json.contains("index")) {
-                inst.index = inst_json.at("index").get<int>();
-                #ifdef TRACE_CODEGEN_DETAILED
-                fmt::print("    Found index field: {}\n", inst.index.value());
-                fmt::print("    index.hasvalue() = {}\n", inst.index.has_value());
-                #endif
-            }
-            if (inst_json.contains("value")) {
-                inst.value = inst_json.at("value").get<std::string>();
-            }
-            if (inst_json.contains("ivalue")) {
-                inst.ivalue = inst_json.at("ivalue").get<int64_t>();
-            }
-
-            // Compile to threaded code: emit label address followed by operands.
-            auto opcode_it = opcode_map_.find(inst.opcode);
-            if (opcode_it == opcode_map_.end()) {
-                throw std::runtime_error(fmt::format("Opcode not found in map: {}", static_cast<int>(inst.opcode)));
-            }
-            Cell label_word;
-            label_word.label_addr = opcode_it->second;
-            func.code.push_back(label_word);
-            #ifdef TRACE_CODEGEN_DETAILED
-            fmt::print("  Compiling instruction: {} at label {}\n", inst.type, static_cast<void*>(label_word.label_addr));
-            #endif
-
-            // Add immediate operands based on instruction type.
-            fmt::print("Processing operands for instruction: {}\n", opcode_to_string(inst.opcode));
-            switch (inst.opcode) {
-            case Opcode::PUSH_INT: {
-                if (!inst.ivalue.has_value()) {
-                    throw std::runtime_error("PUSH_INT requires an ivalue field");
-                }
-                int64_t int_value = inst.ivalue.value();
-                #ifdef TRACE_PLANT_INSTRUCTIONS
-                fmt::print("Plant: PUSH_INT {}\n", int_value);
-                #endif
-
-                Cell operand = make_tagged_int(int_value);
-                func.code.push_back(operand);
-                break;
-            }
-
-            case Opcode::PUSH_BOOL: {
-                if (!inst.value.has_value()) {
-                    throw std::runtime_error("PUSH_BOOL requires a value field");
-                }
-                std::string bool_str = inst.value.value();
-                bool bool_value;
-                if (bool_str == "true") {
-                    bool_value = true;
-                } else if (bool_str == "false") {
-                    bool_value = false;
-                } else {
-                    throw std::runtime_error("PUSH_BOOL value must be 'true' or 'false'");
-                }
-                #ifdef TRACE_PLANT_INSTRUCTIONS
-                fmt::print("Plant: PUSH_BOOL {}\n", bool_value);
-                #endif
-
-                Cell operand = make_bool(bool_value);
-                func.code.push_back(operand);
-                break;
-            }
-
-            case Opcode::PUSH_STRING: {
-                #ifdef TRACE_PLANT_INSTRUCTIONS
-                fmt::print("Plant: PUSH_STRING\n");
-                #endif
-                // Allocate string in heap and store the Cell.
-                std::string str_value = inst.value.value();
-                Cell str_cell = allocate_string(str_value);
-                func.code.push_back(str_cell);
-                break;
-            }
-
-            case Opcode::POP_LOCAL: {
-                throw std::runtime_error("POP_LOCAL not yet implemented");
-            }
-
-            case Opcode::PUSH_LOCAL: {
-                Cell operand;
-                operand.i64 = inst.calc_offset();
-                func.code.push_back(operand);
-                break;
-            }
-
-            case Opcode::PUSH_GLOBAL_LAZY:
-            case Opcode::PUSH_GLOBAL: {
-                #ifdef TRACE_PLANT_INSTRUCTIONS
-                fmt::print("Plant: PUSH_GLOBAL\n");
-                #endif
-
-                if (!inst.name.has_value()) {
-                    throw std::runtime_error("PUSH_GLOBAL requires a name field");
-                }
-
-                Ident* ident_ptr = lookup_ident(inst.name.value());
-                if (ident_ptr == nullptr) {
-                    throw new std::runtime_error(
-                        fmt::format("PUSH_GLOBAL: undefined global variable: {}", inst.name.value()));
-                }
-
-                // Store pointer to global name string (kept in static storage).
-                Cell ident_operand;
-                ident_operand.ptr = static_cast<void*>(ident_ptr);
-                func.code.push_back(ident_operand);
-                break;
-            }
-
-            case Opcode::CALL_GLOBAL_COUNTED_LAZY:
-            case Opcode::CALL_GLOBAL_COUNTED: {
-                #ifdef TRACE_PLANT_INSTRUCTIONS
-                fmt::print("Plant: (L_)CALL_GLOBAL_COUNTED\n");
-                #endif
-                // CALL_GLOBAL has two arguments:
-                // * index = the local variable index to get the previous stack length from, and
-                // * name = the name of the global function to call.
-                if (!inst.index.has_value()) {
-                    throw std::runtime_error("CALL_GLOBAL_COUNTED requires an index field");
-                }
-                if (!inst.name.has_value()) {
-                    throw std::runtime_error("CALL_GLOBAL_COUNTED requires a name field");
-                }
-
-                // Translate the name into an Ident* pointer.
-                Ident* ident_ptr = lookup_ident(inst.name.value());
-                if (ident_ptr == nullptr) {
-                    throw new std::runtime_error(
-                        fmt::format("CALL_GLOBAL_COUNTED: undefined global function: {}", inst.name.value()));
-                }
-
-                #ifdef TRACE_CODEGEN_DETAILED
-                fmt::print("  CALL_GLOBAL_COUNTED compiling with index={} name={} ident_ptr={}\n",
-                           inst.index.value(), inst.name.value(), static_cast<void*>(ident_ptr));
-                #endif
-
-                // Generate the index operand as a raw offset.
-                Cell index_operand = make_raw_i64(inst.calc_offset());
-                func.code.push_back(index_operand);
-                #ifdef TRACE_PLANT_INSTRUCTIONS_DETAILED
-                fmt::print("    Pushed index operand: {}\n", index_operand.i64);
-                #endif
-
-                // Now push the Ident* pointer as the function operand.
-                Cell func_operand;
-                func_operand.ptr = static_cast<void*>(ident_ptr);
-                func.code.push_back(func_operand);
-                break;
-            }
-
-
-            case Opcode::SYSCALL_COUNTED: {
-                // SYSCALL has two arguments:
-                // * index = the local variable index to get the previous stack length from, and
-                // * name = the name of the syscall.
-                #ifdef TRACE_PLANT_INSTRUCTIONS
-                fmt::print("Plant: SYSCALL_COUNTED\n");
-                #endif
-                if (!inst.index.has_value()) {
-                    throw std::runtime_error("SYSCALL_COUNTED requires an index field");
-                }
-                if (!inst.name.has_value()) {
-                    throw std::runtime_error("SYSCALL_COUNTED requires a name field");
-                }
-                #ifdef TRACE_PLANT_INSTRUCTIONS_DETAILED
-                fmt::print("  SYSCALL_COUNTED compiling with index={} name={}\n", inst.index.value(), inst.name.value());
-                #endif
-                // L_SYSCALL_COUNTED requires two operands: the index and the sys-function pointer.
-                Cell index_operand = make_raw_i64(inst.calc_offset());
-                func.code.push_back(index_operand);
-
-                // Look up sys-function in the table.
-                auto it = sysfunctions_table.find(inst.name.value());
-                if (it == sysfunctions_table.end()) {
-                    throw std::runtime_error(fmt::format("Unknown sys-function: {}", inst.name.value()));
-                }
-                SysFunction sys_function = it->second;
-                Cell func_operand;
-                func_operand.ptr = reinterpret_cast<void*>(sys_function);
-                func.code.push_back(func_operand);
-                break;
-            }
-
-
-            case Opcode::STACK_LENGTH: {
-                // We will assign the current stack length into the local
-                // variable defined by index.
-                #ifdef TRACE_PLANT_INSTRUCTIONS
-                fmt::print("Plant: STACK_LENGTH\n");
-                #endif
-                 if (!inst.index.has_value()) {
-                    throw std::runtime_error("STACK_LENGTH requires an index field");
-                }
-                int offset = inst.calc_offset();
-                Cell c = make_raw_i64(offset);
-                func.code.push_back(c);
-                break;
-            }
-
-            case Opcode::CHECK_BOOL: {
-                // Check that the stack has grown by exactly 1 and that the
-                // top of stack is a boolean. Index refers to the local
-                // variable that holds the "before" stack length.
-                #ifdef TRACE_PLANT_INSTRUCTIONS
-                fmt::print("Plant: CHECK_BOOL\n");
-                #endif
-                if (!inst.index.has_value()) {
-                    throw std::runtime_error("CHECK_BOOL requires an index field");
-                }
-                int offset = inst.calc_offset();
-                Cell c = make_raw_i64(offset);
-                func.code.push_back(c);
-                break;
-            }
-
-            case Opcode::RETURN:
-            case Opcode::HALT: {
-                // No operands.
-                break;
-            }
-
-            case Opcode::DONE: {
-                if (!inst.index.has_value()) {
-                    throw std::runtime_error("CALL_GLOBAL_COUNTED requires an index field");
-                }
-                if (!inst.name.has_value()) {
-                    throw std::runtime_error("CALL_GLOBAL_COUNTED requires a name field");
-                }
-
-                // Translate the name into an Ident* pointer.
-                Ident* ident_ptr = lookup_ident(inst.name.value());
-                if (ident_ptr == nullptr) {
-                    throw new std::runtime_error(
-                        fmt::format("DONE: undefined global function: {}", inst.name.value()));
-                }
-
-                // Generate the index operand as a raw offset.
-                Cell index_operand = make_raw_i64(inst.calc_offset());
-                func.code.push_back(index_operand);
-                #ifdef TRACE_PLANT_INSTRUCTIONS_DETAILED
-                fmt::print("    Pushed index operand: {}\n", index_operand.i64);
-                #endif
-
-                // Now push the Ident* pointer as the function operand.
-                Cell func_operand;
-                func_operand.ptr = static_cast<void*>(ident_ptr);
-                func.code.push_back(func_operand);
-                break;
-            }
-
-            default:
-                throw std::runtime_error(fmt::format("Unhandled opcode during compilation: {}", static_cast<int>(inst.opcode)));
-            }
-        }
-
-        // Add HALT at the end.
-        Cell halt_word;
-        halt_word.label_addr = opcode_map_.at(Opcode::HALT);
-        func.code.push_back(halt_word);
-
-        #ifdef TRACE_PLANT_INSTRUCTIONS
-        fmt::print("End of instructions for function: {}\n", idname);
-        #endif
-        
-        return func;
-    } catch (const nlohmann::json::exception& e) {
-        throw std::runtime_error(fmt::format("JSON parsing error: {}", e.what()));
-    }
-
+    ParseFunctionObject parser(*this, idname, deps);
+    nlohmann::json j = nlohmann::json::parse(json_str);
+    return parser.parse(json_str);
 }
 
 
@@ -586,15 +217,15 @@ FunctionObject Machine::parse_function_object(const std::string& idname, const s
 // Both phases occur within the same function scope, ensuring label addresses
 // remain valid throughout the threaded interpreter's lifetime.
 void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
-    #ifdef TRACE_CODEGEN
-    fmt::print("threaded_impl called, init_mode={}\n", init_mode);
-    #endif
+    if constexpr (TRACE_CODEGEN) {
+        fmt::print("threaded_impl called, init_mode={}\n", init_mode);
+    }
     #ifdef __GNUC__
     // In init mode, just capture the labels and return.
     if (init_mode) {
-        #ifdef TRACE_CODEGEN
-        fmt::print("In init mode, capturing labels\n");
-        #endif
+        if constexpr (TRACE_CODEGEN) {
+            fmt::print("In init mode, capturing labels\n");
+        }
         opcode_map_ = {
             {Opcode::PUSH_INT, &&L_PUSH_VALUE},
             {Opcode::PUSH_BOOL, &&L_PUSH_VALUE},
@@ -609,6 +240,8 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
             {Opcode::SYSCALL_COUNTED, &&L_SYSCALL_COUNTED},
             {Opcode::STACK_LENGTH, &&L_STACK_LENGTH},
             {Opcode::CHECK_BOOL, &&L_CHECK_BOOL},
+            {Opcode::GOTO, &&L_GOTO},
+            {Opcode::IF_NOT, &&L_IF_NOT},
             {Opcode::RETURN, &&L_RETURN},
             {Opcode::HALT, &&L_HALT},
             {Opcode::DONE, &&L_DONE},
@@ -617,58 +250,50 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
     }
 
     // Run mode: execute the compiled code.
-    #ifdef TRACE_CODEGEN_DETAILED
-    fmt::print("Run mode: code->data() = {}\n", static_cast<void*>(code->data()));
-    #endif
+    if constexpr (TRACE_CODEGEN_DETAILED) {
+        fmt::print("Run mode: code->data() = {}\n", static_cast<void*>(code->data()));
+    }
     Cell* pc = code->data();
-    #ifdef TRACE_CODEGEN_DETAILED
-    fmt::print("pc = {}, label = {}\n", static_cast<void*>(pc), static_cast<void*>(pc->label_addr));
-    #endif
+    if constexpr (TRACE_CODEGEN_DETAILED) {
+        fmt::print("pc = {}, label = {}\n", static_cast<void*>(pc), static_cast<void*>(pc->label_addr));
+    }
 
     // Jump to the first instruction.
-    #ifdef TRACE_CODEGEN_DETAILED
-    fmt::print("About to jump\n");
-    #endif
+    if constexpr (TRACE_CODEGEN_DETAILED) {
+        fmt::print("About to jump\n");
+    }
     goto *pc++->label_addr;
 
     L_PUSH_VALUE: {
         Cell value = *pc++;
-        #ifdef DEBUG_INSTRUCTIONS
-        fmt::print("PUSH_VALUE {}\n", cell_to_string(value));
-        #endif
+        if constexpr (DEBUG_INSTRUCTIONS) {
+            fmt::print("PUSH_VALUE {}\n", cell_to_string(value));
+        }
         push(value);
         goto *(pc++)->label_addr;
     }
 
     L_POP_LOCAL: {
-        #ifdef DEBUG_INSTRUCTIONS
-        fmt::print("POP_LOCAL\n");
-        #endif
-    //     #ifdef DEBUG_INSTRUCTIONS
-    //     fmt::print("POP_LOCAL\n");
-    //     #endif
-    //     int64_t idx = (pc++)->i64;
-    //     Cell value = pop();
-    //     int nlocals = heap_.get_function_nlocals(current_function_);
-    //     size_t offset = return_stack_.size() - nlocals + idx;
-    //     return_stack_[offset] = value;
+        if constexpr (DEBUG_INSTRUCTIONS) {
+            fmt::print("POP_LOCAL\n");
+        }
         throw std::runtime_error("POP_LOCAL not implemented yet");
         goto *(pc++)->label_addr;
     }
 
     L_PUSH_LOCAL: {
         int offset = (pc++)->i64;
-        #ifdef DEBUG_INSTRUCTIONS
-        fmt::print("PUSH_LOCAL #{}\n", offset);
-        #endif
-        operand_stack_.push_back(get_local_variable(offset));
+        if constexpr (DEBUG_INSTRUCTIONS) {
+            fmt::print("PUSH_LOCAL #{}\n", offset);
+        }
+        operand_stack_.push(get_local_variable(offset));
         goto *(pc++)->label_addr;
     }
 
     L_IN_PROGRESS: {
-        #ifdef DEBUG_INSTRUCTIONS
-        fmt::print("IN_PROGRESS\n");
-        #endif
+        if constexpr (DEBUG_INSTRUCTIONS) {
+            fmt::print("IN_PROGRESS\n");
+        }
         Ident* ident_ptr = static_cast<Ident*>(pc->ptr);
         if (ident_ptr->in_progress) {
             throw std::runtime_error("Recursive evaluation of top-level constants detected");
@@ -678,9 +303,9 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
     }
 
     L_DONE: {
-        #ifdef DEBUG_INSTRUCTIONS
-        fmt::print("DONE\n");
-        #endif
+        if constexpr (DEBUG_INSTRUCTIONS) {
+            fmt::print("DONE\n");
+        }
         // Get the count of arguments from the local variable.
         int64_t offset = (pc++)->i64;
         uint64_t count = operand_stack_.size() - as_detagged_int(get_local_variable(offset));
@@ -701,9 +326,9 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
     }
 
     L_PUSH_GLOBAL_LAZY: {
-        #ifdef DEBUG_INSTRUCTIONS
-        fmt::print("PUSH_GLOBAL_LAZY\n");
-        #endif
+        if constexpr (DEBUG_INSTRUCTIONS) {
+            fmt::print("PUSH_GLOBAL_LAZY\n");
+        }
         Cell * self = pc - 1;
         Ident* ident_ptr = static_cast<Ident*>((pc++)->ptr);
         if (ident_ptr->lazy) {
@@ -719,18 +344,18 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
     }
 
     L_PUSH_GLOBAL: {
-        #ifdef DEBUG_INSTRUCTIONS
-        fmt::print("PUSH_GLOBAL\n");
-        #endif
+        if constexpr (DEBUG_INSTRUCTIONS) {
+            fmt::print("PUSH_GLOBAL\n");
+        }
         Ident* ident_ptr = static_cast<Ident*>((pc++)->ptr);
         push(ident_ptr->cell);
         goto *(pc++)->label_addr;
     }
 
     L_CALL_GLOBAL_COUNTED_LAZY: {
-        #ifdef DEBUG_INSTRUCTIONS
-        fmt::print("L_CALL_GLOBAL_COUNTED_LAZY\n");
-        #endif
+        if constexpr (DEBUG_INSTRUCTIONS) {
+            fmt::print("L_CALL_GLOBAL_COUNTED_LAZY\n");
+        }
         Cell * self = pc - 1;
         int64_t offset = (pc++)->i64;
         Ident* ident_ptr = static_cast<Ident*>((pc++)->ptr);
@@ -748,9 +373,9 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
     }
 
     L_CALL_GLOBAL_COUNTED: {
-        #ifdef DEBUG_INSTRUCTIONS
-        fmt::print("CALL_GLOBAL_COUNTED\n");
-        #endif
+        if constexpr (DEBUG_INSTRUCTIONS) {
+            fmt::print("CALL_GLOBAL_COUNTED\n");
+        }
 
         // Get the count of arguments from the local variable.
         int64_t offset = (pc++)->i64;
@@ -760,37 +385,27 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
         Ident* ident_ptr = static_cast<Ident*>((pc++)->ptr);
         Cell* func_ptr = get_function_ptr(ident_ptr->cell);
 
-        #ifdef EXTRA_CHECKS
-        if (!heap_.is_function_object(func_ptr)) {
-            throw std::runtime_error("Attempt to call a non-function object");
-        } else {
-            fmt::print("Verified function object\n");
+        if constexpr (EXTRA_CHECKS) {
+            if (!heap_.is_function_object(func_ptr)) {
+                throw std::runtime_error("Attempt to call a non-function object");
+            } else {
+                fmt::print("Verified function object\n");
+            }
         }
-        #endif
 
         // Get the number of nlocals and nparams from the function object.
-        int nlocals = heap_.get_function_nlocals(func_ptr);
-        int nparams = heap_.get_function_nparams(func_ptr);
+        auto [nextras, nparams] = heap_.get_function_extras_and_params(func_ptr);
 
-        #ifdef TRACE_EXECUTION
-        fmt::print("CALL_GLOBAL_COUNTED: nparams = {}, nlocals = {}, arg_count = {}\n", nparams, nlocals, count);
-        #endif
+        if constexpr (TRACE_EXECUTION) {
+            fmt::print("CALL_GLOBAL_COUNTED: nparams = {}, nlocals = {}, arg_count = {}\n", nparams, nextras + nparams, count);
+        }
 
-        // Build stack frame: [return_address][func_obj][local_0]...[local_nlocals-1]
+        // Build stack frame: [return_address][func_obj][local_nlocals-1]...[local_0]
+
+        operand_stack_.move_multiple(count, return_stack_);
+        
         // Initialize remaining locals to nil.
-        for (int i = nparams; i < nlocals; i++)
-        {
-            push_return(SPECIAL_NIL);
-        }
-
-        // Pop parameters from operand stack and push to return stack.
-        // Operand stack has params in reverse order, so popping gives us the right order.
-        for (int i = 0; i < nparams; i++)
-        {
-            Cell c = pop();
-            fmt::print("Popping param {} = {}\n", i, cell_to_string(c));
-            push_return(c);
-        }
+        return_stack_.push_multiple(SPECIAL_NIL, nextras);
 
         // Save func_obj pointer so RETURN can read nlocals.
         Cell func_cell;
@@ -812,9 +427,9 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
         int64_t offset = (pc++)->i64;
         auto value = as_detagged_int(get_local_variable(offset));
         uint64_t count = operand_stack_.size() - as_detagged_int(get_local_variable(offset));
-        #ifdef DEBUG_INSTRUCTIONS
-        fmt::print("SYSCALL_COUNTED, offset={}, value={}, stack_size={}, count={}\n", offset, value, operand_stack_.size(), count);
-        #endif
+        if constexpr (DEBUG_INSTRUCTIONS) {
+            fmt::print("SYSCALL_COUNTED, offset={}, value={}, stack_size={}, count={}\n", offset, value, operand_stack_.size(), count);
+        }
         SysFunction sys_function = reinterpret_cast<SysFunction>((pc++)->ptr);
         sys_function(*this, static_cast<int>(count));
 
@@ -826,9 +441,9 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
         // the operand, which is a raw i64.
         int64_t offset = (pc++)->i64;
         get_local_variable(offset) = make_tagged_int(static_cast<int64_t>(operand_stack_.size()));
-        #ifdef DEBUG_INSTRUCTIONS
-        fmt::print("STACK_LENGTH, offset = {}, size = {}\n", offset, operand_stack_.size());
-        #endif
+        if constexpr (DEBUG_INSTRUCTIONS) {
+            fmt::print("STACK_LENGTH, offset = {}, size = {}\n", offset, operand_stack_.size());
+        }
 
         goto *(pc++)->label_addr;
     }
@@ -839,9 +454,9 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
         int64_t offset = (pc++)->i64;
         int64_t before_size = as_detagged_int(get_local_variable(offset));
         int64_t current_size = static_cast<int64_t>(operand_stack_.size());
-        #ifdef DEBUG_INSTRUCTIONS
-        fmt::print("CHECK_BOOL, offset = {}, before = {}, current = {}\n", offset, before_size, current_size);
-        #endif
+        if constexpr (DEBUG_INSTRUCTIONS) {
+            fmt::print("CHECK_BOOL, offset = {}, before = {}, current = {}\n", offset, before_size, current_size);
+        }
 
         // Check that exactly one value was pushed.
         if (current_size != before_size + 1) {
@@ -861,10 +476,53 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
         goto *(pc++)->label_addr;
     }
 
+    L_GOTO: {
+        // Unconditional jump. Read the relative offset and adjust pc.
+        int64_t offset = (pc++)->i64;
+        if constexpr (DEBUG_INSTRUCTIONS) {
+            fmt::print("GOTO, offset = {}\n", offset);
+        }
+        
+        // Apply the offset to pc. The offset is relative to the current pc position.
+        pc += offset;
+        
+        // Jump to the instruction at the target.
+        goto *pc++->label_addr;
+    }
+
+    L_IF_NOT: {
+        // Conditional jump: jump if top of stack is SPECIAL_FALSE.
+        int64_t offset = (pc++)->i64;
+        
+        // Pop the condition from the stack.
+        Cell condition = pop();
+        
+        if constexpr (DEBUG_INSTRUCTIONS) {
+            fmt::print("IF_NOT, offset = {}, condition = {}\n", offset, cell_to_string(condition));
+        }
+        
+        // Check if the condition is false.
+        if (condition.u64 == SPECIAL_FALSE.u64) {
+            // Condition is false - take the jump.
+            pc += offset;
+            if constexpr (DEBUG_INSTRUCTIONS) {
+                fmt::print("  Taking jump to offset {}\n", offset);
+            }
+        } else {
+            // Condition is not false - fall through (no jump).
+            if constexpr (DEBUG_INSTRUCTIONS) {
+                fmt::print("  Not taking jump, falling through\n");
+            }
+        }
+        
+        // Continue execution at the (possibly adjusted) pc.
+        goto *pc++->label_addr;
+    }
+
     L_RETURN: {
-        #ifdef DEBUG_INSTRUCTIONS
-        fmt::print("RETURN\n");
-        #endif
+        if constexpr (DEBUG_INSTRUCTIONS) {
+            fmt::print("RETURN\n");
+        }
         // Clean up stack frame: [return_address][func_obj][local_0]...[local_nlocals-1]
 
         // Restore return address (raw).
@@ -885,20 +543,20 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
     }
 
     L_HALT: {
-        #ifdef DEBUG_INSTRUCTIONS
-        fmt::print("HALT\n");
-        #endif
+        if constexpr (DEBUG_INSTRUCTIONS) {
+            fmt::print("HALT\n");
+        }
         return;
     }
 
     L_LAUNCH: {
-        #ifdef DEBUG_INSTRUCTIONS
-        fmt::print("LAUNCH\n");
-        #endif
+        if constexpr (DEBUG_INSTRUCTIONS) {
+            fmt::print("LAUNCH\n");
+        }
         pc = LaunchInstruction(pc);
-        #ifdef DEBUG_INSTRUCTIONS_DETAIL
-        fmt::print("&&L_STACK_LENGTH = {}, new pc = {}\n", static_cast<void*>(&&L_STACK_LENGTH), static_cast<void*>(pc));
-        #endif
+        if constexpr (DEBUG_INSTRUCTIONS_DETAIL) {
+            fmt::print("&&L_STACK_LENGTH = {}, new pc = {}\n", static_cast<void*>(&&L_STACK_LENGTH), static_cast<void*>(pc));
+        }
         goto *pc++->label_addr;
     }
 
@@ -915,8 +573,7 @@ inline Cell* Machine::call_function_object(Cell* pc, Cell* func_ptr, int arg_cou
 
 
     // Get the number of nlocals and nparams from the function object.
-    int nlocals = heap_.get_function_nlocals(func_ptr);
-    int nparams = heap_.get_function_nparams(func_ptr);
+    auto [nextras, nparams] = heap_.get_function_extras_and_params(func_ptr);
 
     // Check the number of arguments is consistent with nparams.
     if (arg_count != nparams) {
@@ -924,19 +581,14 @@ inline Cell* Machine::call_function_object(Cell* pc, Cell* func_ptr, int arg_cou
             fmt::format("Function expected {} arguments, but got {}", nparams, arg_count));
     }
 
+    // Move n parameters from operand stack to return stack. This means that the
+    // first parameter (#0) is lowest on the return stack, which means we have to
+    // adjust the offset accordingly.
+    operand_stack_.move_multiple(nparams, return_stack_);
+
     // Build stack frame: [return_address][func_obj][local_0]...[local_nlocals-1]
     // Initialize remaining locals to nil.
-    for (int i = nparams; i < nlocals; i++)
-    {
-        push_return(SPECIAL_NIL);
-    }
-
-    // Pop parameters from operand stack and push to return stack.
-    // Operand stack has params in reverse order, so popping gives us the right order.
-    for (int i = 0; i < nparams; i++)
-    {
-        push_return(pop());
-    }
+    return_stack_.push_multiple(SPECIAL_NIL, nextras);
 
     // Save func_obj pointer so RETURN can read nlocals.
     Cell func_cell;
@@ -966,36 +618,28 @@ Cell * Machine::LaunchInstruction(Cell *pc)
     Cell *func_obj = static_cast<Cell *>((pc++)->ptr);
 
     // Display the structure of the function object for debugging.
-    #ifdef DEBUG_INSTRUCTIONS_DETAIL
-    fmt::print("Length of instructions: {}\n", as_detagged_int(func_obj[-2]));
-    fmt::print("T-block length: {}\n", as_detagged_int(func_obj[-1]));
-    fmt::print("FunctionDataKey: {}\n", static_cast<void*>(func_obj[0].ptr));
-    fmt::print("NLocals: {}\n", heap_.get_function_nlocals(func_obj));
-    fmt::print("NParams: {}\n", heap_.get_function_nparams(func_obj));
-    for (int i = 0; i < as_detagged_int(func_obj[-2]); i++) {
-        Cell instr = heap_.get_function_code(func_obj)[i];
-        fmt::print("Instruction[{}]: label_addr={}\n", i, static_cast<void*>(instr.label_addr));
+    if constexpr (DEBUG_INSTRUCTIONS_DETAIL) {
+        fmt::print("Length of instructions: {}\n", as_detagged_int(func_obj[-2]));
+        fmt::print("T-block length: {}\n", as_detagged_int(func_obj[-1]));
+        fmt::print("FunctionDataKey: {}\n", static_cast<void*>(func_obj[0].ptr));
+        fmt::print("NLocals: {}\n", heap_.get_function_nlocals(func_obj));
+        fmt::print("NParams: {}\n", heap_.get_function_nparams(func_obj));
+        for (int i = 0; i < as_detagged_int(func_obj[-2]); i++) {
+            Cell instr = heap_.get_function_code(func_obj)[i];
+            fmt::print("Instruction[{}]: label_addr={}\n", i, static_cast<void*>(instr.label_addr));
+        }
     }
-    #endif
 
     // Get function metadata.
-    int nlocals = heap_.get_function_nlocals(func_obj);
-    int nparams = heap_.get_function_nparams(func_obj);
+    auto [nextras, nparams] = heap_.get_function_extras_and_params(func_obj);
 
-    // Build stack frame: [return_address][func_obj][local_0]...[local_nlocals-1]
+    // Build stack frame: [return_address][func_obj][local_nlocals-1]...[local_0]
+
+    operand_stack_.move_multiple(nparams, return_stack_);
 
     // Initialize remaining locals to nil.
-    for (int i = nparams; i < nlocals; i++)
-    {
-        push_return(SPECIAL_NIL);
-    }
+    return_stack_.push_multiple(SPECIAL_NIL, nextras);
 
-    // Pop parameters from operand stack and push to return stack.
-    // Operand stack has params in reverse order, so popping gives us the right order.
-    for (int i = 0; i < nparams; i++)
-    {
-        push_return(pop());
-    }
 
     // Save func_obj pointer so RETURN can read nlocals.
     Cell func_cell;
@@ -1010,12 +654,12 @@ Cell * Machine::LaunchInstruction(Cell *pc)
 
     // Set pc to function code (caller will do the goto).
     pc = heap_.get_function_code(func_obj);
-    #ifdef DEBUG_INSTRUCTIONS_DETAIL
-    fmt::print("LaunchInstruction: func_obj={}, returned pc={}\n", static_cast<void*>(func_obj), static_cast<void*>(pc));
-    if (pc == func_obj) {
-        fmt::print("ERROR: get_function_code returned func_obj itself!\n");
+    if constexpr (DEBUG_INSTRUCTIONS_DETAIL) {
+        fmt::print("LaunchInstruction: func_obj={}, returned pc={}\n", static_cast<void*>(func_obj), static_cast<void*>(pc));
+        if (pc == func_obj) {
+            fmt::print("ERROR: get_function_code returned func_obj itself!\n");
+        }
     }
-    #endif
     return pc;
 }
 

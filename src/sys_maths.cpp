@@ -3,8 +3,7 @@
 #include "value.hpp"
 #include <fmt/core.h>
 #include <stdexcept>
-
-#define DEBUG
+#include "trace.hpp"
 
 namespace nutmeg {
 
@@ -28,24 +27,24 @@ static void binary_cell_operation(
     Cell n = machine.pop();
     Cell m = machine.peek();
 
-    #ifdef DEBUG
-    fmt::print("{}: operating on {} and {}\n", op_name, cell_to_string(m), cell_to_string(n));
-    #endif
+    if constexpr (DEBUG) {
+        fmt::print("{}: operating on {} and {}\n", op_name, cell_to_string(m), cell_to_string(n));
+    }
 
     Cell result = operation(m, n);
 
-    #ifdef DEBUG
-    fmt::print("{}: {} {} {} = {}\n", op_name, cell_to_string(m), op_symbol, cell_to_string(n), cell_to_string(result));
-    #endif
+    if constexpr (DEBUG) {
+        fmt::print("{}: {} {} {} = {}\n", op_name, cell_to_string(m), op_symbol, cell_to_string(n), cell_to_string(result));
+    }
 
     machine.peek() = result;
 
-    #ifdef DEBUG
-    fmt::print("stack after {}: size = {}\n", op_name, machine.stack_size());
-    for (size_t idx = 0; idx < machine.stack_size(); idx++) {
-        fmt::print("  [{}]: {}\n", idx, cell_to_string(machine.peek_at(idx)));
+    if constexpr (DEBUG) {
+        fmt::print("stack after {}: size = {}\n", op_name, machine.stack_size());
+        for (size_t idx = 0; idx < machine.stack_size(); idx++) {
+            fmt::print("  [{}]: {}\n", idx, cell_to_string(machine.peek_at(idx)));
+        }
     }
-    #endif
 }
 
 void sys_identical(Machine& machine, uint64_t nargs) {
@@ -79,9 +78,9 @@ static void binary_int_operation(
     Cell n = machine.pop();
     Cell m = machine.peek();
 
-    #ifdef DEBUG
-    fmt::print("{}: operating on {} and {}\n", op_name, cell_to_string(m), cell_to_string(n));
-    #endif
+    if constexpr (nutmeg::DEBUG) {
+        fmt::print("{}: operating on {} and {}\n", op_name, cell_to_string(m), cell_to_string(n));
+    }
 
     // Both must be tagged integers.
     if (!is_tagged_int(n) || !is_tagged_int(m)) {
@@ -92,18 +91,18 @@ static void binary_int_operation(
     int64_t j = as_detagged_int(n);
     Cell result = operation(i, j);
 
-    #ifdef DEBUG
-    fmt::print("{}: {} {} {} = {}\n", op_name, i, op_symbol, j, cell_to_string(result));
-    #endif
+    if constexpr (DEBUG) {
+        fmt::print("{}: {} {} {} = {}\n", op_name, i, op_symbol, j, cell_to_string(result));
+    }
 
     machine.peek() = result;
 
-    #ifdef DEBUG
-    fmt::print("stack after {}: size = {}\n", op_name, machine.stack_size());
-    for (size_t idx = 0; idx < machine.stack_size(); idx++) {
-        fmt::print("  [{}]: {}\n", idx, cell_to_string(machine.peek_at(idx)));
+    if constexpr (DEBUG) {
+        fmt::print("stack after {}: size = {}\n", op_name, machine.stack_size());
+        for (size_t idx = 0; idx < machine.stack_size(); idx++) {
+            fmt::print("  [{}]: {}\n", idx, cell_to_string(machine.peek_at(idx)));
+        }
     }
-    #endif
 }
 
 // Sys-function implementations for arithmetic operations.
@@ -173,9 +172,9 @@ static void unary_int_operation(
 
     Cell x = machine.peek();
 
-    #ifdef DEBUG
-    fmt::print("{}: operating on {}\n", op_name, cell_to_string(x));
-    #endif
+    if constexpr (DEBUG) {
+        fmt::print("{}: operating on {}\n", op_name, cell_to_string(x));
+    }
 
     // Both must be tagged integers.
     if (!is_tagged_int(x)) {
@@ -185,18 +184,18 @@ static void unary_int_operation(
     int64_t i = as_detagged_int(x);
     int64_t result = operation(i);
 
-    #ifdef DEBUG
-    fmt::print("{}: {} {} = {}\n", op_name, op_symbol, i, result);
-    #endif
+    if constexpr (DEBUG) {
+        fmt::print("{}: {} {} = {}\n", op_name, op_symbol, i, result);
+    }
 
     machine.peek() = make_tagged_int(result);
 
-    #ifdef DEBUG
-    fmt::print("stack after {}: size = {}\n", op_name, machine.stack_size());
-    for (size_t idx = 0; idx < machine.stack_size(); idx++) {
-        fmt::print("  [{}]: {}\n", idx, cell_to_string(machine.peek_at(idx)));
+    if constexpr (DEBUG) {
+        fmt::print("stack after {}: size = {}\n", op_name, machine.stack_size());
+        for (size_t idx = 0; idx < machine.stack_size(); idx++) {
+            fmt::print("  [{}]: {}\n", idx, cell_to_string(machine.peek_at(idx)));
+        }
     }
-    #endif
 }
 
 void sys_negate(Machine& machine, uint64_t nargs) {

@@ -126,8 +126,10 @@ number of arguments accepted by the function.
 | -2  | Length N, number of instruction words | Tagged, guaranteed x00 tag |
 | -1  | Length L, of the T-block | Tagged, guaranteed x00 tag |
 | 0 | Datakey | Tagged |
-| 1 | Number of locals | Raw, 32 bits |
-| 1.5 | Number of input arguments | Raw, 32 bits |
+| 1 | Low order 16-bits, nparams | Raw, 16 bits |
+| 1 | Next 16-bits, nextras | Raw, 16 bits |
+| 1 | Next 16-bits, nlocals | Raw, 16 bits |
+| 1 | Upper 16-bits, reserved | Raw, 16 bits |
 | 2  | Instruction word #1 | Mixed |
 | ... | ... | Mixed |
 | 2+N-1 | Last instruction #N | Mixed |
