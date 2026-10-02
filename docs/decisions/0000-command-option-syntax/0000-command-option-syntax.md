@@ -6,6 +6,9 @@ There's no universal consensus on the syntax of command-line options. This note
 documents the approach to be taken with nutmeg-run (and similar commands such as
 nutmeg-common, nutmeg-bundler etc) and the nutmeg command itself.
 
+The wildcard problem behind several of these rules is explained at length in the
+[sticky quotes proposal](https://github.com/sfkleach/better-mousetrap/blob/main/ideas/sticky-quotes.md).
+
 
 ## Terminology
 
@@ -17,9 +20,9 @@ these names:
 - maybe-valued
 - uni-valued
 
-# Decision
+## Decision
 
-- Subcommands (relevent to the `nutmeg` command but not `nutmeg-run`)
+- Subcommands (relevant to the `nutmeg` command but not `nutmeg-run`)
 - Short options
     - `cmd -x`, when the option _can_ take no value (zero/maybe valued)
     - `cmd -o VALUE`, when the option is _required_ to take a value (uni valued)
@@ -49,7 +52,7 @@ these names:
 ## Factors
 
 - Subcommands are appropriate when the command is effectively a gateway to
-  a set of signficantly different functions.
+  a set of significantly different functions.
 
 - Short-option with arguments are potentially confusing, so we do not allow
   option-compaction to include short-options that are taking values. This has
@@ -61,13 +64,13 @@ these names:
   distinguishing files starting with a `-` sign or even `--` is an underrated
   weakness in many system commands. For example, create a file `-l` with
   the command `touch -- -l` and then try `ls *l` and you will see the `ls` 
-  command accept the wildcard exansion as an option! This is clearly a
+  command accept the wildcard expansion as an option! This is clearly a
   serious design flaw.
 
 - To prevent this, we require that positional arguments, which might be
   completed with a wildcard expansion and substitute options, only appear in
   contexts that exclude named arguments. The risk here is that the user
-  accidently omits a positional argument and the named argument is accepted. 
+  accidentally omits a positional argument and the named argument is accepted. 
   
 - To mitigate this risk, we require that when a positional arguments begins with
   a `-`, an early sanity check of that argument is made OR a suppressable 
@@ -81,7 +84,7 @@ these names:
 ## Consequences
 
 - Note that a common idiom `cp FILES... DEST` is forbidden by these rules.
-  This is by design, since `cp` has multiple weaknesses e.g. cp *.web /tmp
+  This is by design, since `cp` has multiple weaknesses e.g. cp *.txt /tmp
   will fail if there are no matching files. And `cp` can be tricked by files
   with leading `-` signs. The equivalent within these rules would be:
   `cp --to DEST -- FILES...`. Clumsier but, given the bad design of wildcard
