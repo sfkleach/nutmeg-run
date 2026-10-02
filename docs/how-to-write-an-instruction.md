@@ -244,12 +244,12 @@ which is never correct (except when forcing code sharing as a "trick").
 
 ## Potential Pitfalls
 
-### 1. Forgetting to update opcode_map
+### 1. Forgetting to update opcode_map_
 
-After adding your label, you must register it in `this->opcode_map` in the `Machine::threaded_impl` constructor:
+After adding your label, you must register it in `opcode_map_` in the `init_mode` branch of `Machine::threaded_impl`:
 
 ```cpp
-this->opcode_map = {
+opcode_map_ = {
     // ... existing mappings ...
     {Opcode::MY_INSTRUCTION, &&L_MY_INSTRUCTION},
 };
@@ -304,7 +304,7 @@ L_MY_INSTRUCTION: {
 Some instructions have both regular and lazy variants (e.g., `PUSH_GLOBAL` and `PUSH_GLOBAL_LAZY`). The mapping in `instruction.cpp::string_to_opcode_map` returns a pair. Make sure both are mapped to their labels:
 
 ```cpp
-this->opcode_map = {
+opcode_map_ = {
     {Opcode::MY_INSTRUCTION, &&L_MY_INSTRUCTION},
     {Opcode::MY_INSTRUCTION_LAZY, &&L_MY_INSTRUCTION_LAZY},
 };
@@ -449,8 +449,8 @@ void ParseFunctionObject::plant_duplicate(FunctionObject& func, const Instructio
 ### In machine.cpp (threaded implementation)
 
 ```cpp
-// In Machine::threaded_impl constructor:
-this->opcode_map = {
+// In the init_mode branch of Machine::threaded_impl:
+opcode_map_ = {
     // ... existing mappings ...
     {Opcode::DUPLICATE, &&L_DUPLICATE},
 };
