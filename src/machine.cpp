@@ -226,7 +226,7 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
         if constexpr (TRACE_CODEGEN) {
             fmt::print("In init mode, capturing labels\n");
         }
-        opcode_map_ = {
+        this->opcode_map_ = {
             {Opcode::PUSH_INT, &&L_PUSH_VALUE},
             {Opcode::PUSH_BOOL, &&L_PUSH_VALUE},
             {Opcode::PUSH_STRING, &&L_PUSH_VALUE},
@@ -240,6 +240,7 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
             {Opcode::SYSCALL_COUNTED, &&L_SYSCALL_COUNTED},
             {Opcode::STACK_LENGTH, &&L_STACK_LENGTH},
             {Opcode::CHECK_BOOL, &&L_CHECK_BOOL},
+            {Opcode::CHECK_COUNT_IS_1, &&L_CHECK_COUNT_IS_1},
             {Opcode::GOTO, &&L_GOTO},
             {Opcode::IF_NOT, &&L_IF_NOT},
             {Opcode::RETURN, &&L_RETURN},
@@ -274,10 +275,11 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
     }
 
     L_POP_LOCAL: {
+        int offset = (pc++)->i64;
         if constexpr (DEBUG_INSTRUCTIONS) {
-            fmt::print("POP_LOCAL\n");
+            fmt::print("POP_LOCAL #{}\n", offset);
         }
-        throw std::runtime_error("POP_LOCAL not implemented yet");
+        get_local_variable(offset) = operand_stack_.pop();
         goto *(pc++)->label_addr;
     }
 
@@ -321,7 +323,7 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
 
         // Verify the value is now a function pointer.
         heap_.must_be_function_value(ident_ptr->cell);
-        
+
         goto *(pc++)->label_addr;
     }
 
@@ -403,7 +405,7 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
         // Build stack frame: [return_address][func_obj][local_nlocals-1]...[local_0]
 
         operand_stack_.move_multiple(count, return_stack_);
-        
+
         // Initialize remaining locals to nil.
         return_stack_.push_multiple(SPECIAL_NIL, nextras);
 
@@ -476,16 +478,36 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
         goto *(pc++)->label_addr;
     }
 
+    L_CHECK_COUNT_IS_1: {
+        // Verify that the stack has grown by exactly 1 since the "before"
+        // snapshot.
+        int64_t offset = (pc++)->i64;
+        int64_t before_size = as_detagged_int(get_local_variable(offset));
+        int64_t current_size = static_cast<int64_t>(operand_stack_.size());
+        if constexpr (DEBUG_INSTRUCTIONS) {
+            fmt::print("CHECK_COUNT_IS_1, offset = {}, before = {}, current = {}\n", offset, before_size, current_size);
+        }
+
+        // Check that exactly one value was pushed.
+        if (current_size != before_size + 1) {
+            throw std::runtime_error(
+                fmt::format("CHECK_COUNT_IS_1 failed: expected stack size {}, got {}", before_size + 1, current_size)
+            );
+        }
+
+        goto *(pc++)->label_addr;
+    }
+
     L_GOTO: {
         // Unconditional jump. Read the relative offset and adjust pc.
         int64_t offset = (pc++)->i64;
         if constexpr (DEBUG_INSTRUCTIONS) {
             fmt::print("GOTO, offset = {}\n", offset);
         }
-        
+
         // Apply the offset to pc. The offset is relative to the current pc position.
         pc += offset;
-        
+
         // Jump to the instruction at the target.
         goto *pc++->label_addr;
     }
@@ -493,14 +515,14 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
     L_IF_NOT: {
         // Conditional jump: jump if top of stack is SPECIAL_FALSE.
         int64_t offset = (pc++)->i64;
-        
+
         // Pop the condition from the stack.
         Cell condition = pop();
-        
+
         if constexpr (DEBUG_INSTRUCTIONS) {
             fmt::print("IF_NOT, offset = {}, condition = {}\n", offset, cell_to_string(condition));
         }
-        
+
         // Check if the condition is false.
         if (condition.u64 == SPECIAL_FALSE.u64) {
             // Condition is false - take the jump.
@@ -514,7 +536,7 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
                 fmt::print("  Not taking jump, falling through\n");
             }
         }
-        
+
         // Continue execution at the (possibly adjusted) pc.
         goto *pc++->label_addr;
     }

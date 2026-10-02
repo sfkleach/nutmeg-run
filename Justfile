@@ -14,6 +14,7 @@ build:
     # CMake warns about unused CMAKE_TOOLCHAIN_FILE on cached builds. Only pass it on first configure.
     @cd {{build-dir}} && [ -f CMakeCache.txt ] && cmake .. -DCMAKE_BUILD_TYPE=Debug -Wno-dev --log-level=ERROR || cmake .. -DCMAKE_TOOLCHAIN_FILE=conan_toolchain.cmake -DCMAKE_BUILD_TYPE=Debug -Wno-dev --log-level=ERROR
     @cd {{build-dir}} && cmake --build . --config Debug -- -j $(nproc) --quiet
+    @echo "Build complete. Binary located at {{binary}}"
 
 rebuild: clean build
 
@@ -24,6 +25,7 @@ release:
     # CMake warns about unused CMAKE_TOOLCHAIN_FILE on cached builds. Only pass it on first configure.
     @cd {{build-dir}} && [ -f CMakeCache.txt ] && cmake .. -DCMAKE_BUILD_TYPE=Release -Wno-dev --log-level=ERROR || cmake .. -DCMAKE_TOOLCHAIN_FILE=conan_toolchain.cmake -DCMAKE_BUILD_TYPE=Release -Wno-dev --log-level=ERROR
     @cd {{build-dir}} && cmake --build . --config Release -- -j $(nproc) --quiet
+    @echo "Release build complete. Binary located at {{binary}}"
 
 rerelease: clean release
 
