@@ -10,7 +10,7 @@ namespace nutmeg {
 
 // Enable bounds checking for stack operations.
 // Set to false for maximum performance in production builds.
-constexpr bool ENABLE_STACK_CHECKS = false;
+constexpr bool ENABLE_STACK_CHECKS = true;
 
 // Lightweight stack implementation for VM stacks.
 // Uses a fixed-size backing array with pointer-based operations.
