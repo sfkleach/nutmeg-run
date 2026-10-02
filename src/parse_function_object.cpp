@@ -141,6 +141,9 @@ void ParseFunctionObject::plant_instruction(FunctionObject& func, const Instruct
         case Opcode::CHECK_BOOL:
             plant_check_bool(func, inst);
             break;
+        case Opcode::CHECK_COUNT_IS_1:
+            plant_check_count_is_1(func, inst);
+            break;
         case Opcode::GOTO:
             plant_goto(func, inst);
             break;
@@ -235,7 +238,12 @@ void ParseFunctionObject::plant_push_string(FunctionObject& func, const Instruct
 }
 
 void ParseFunctionObject::plant_pop_local(FunctionObject& func, const Instruction& inst) {
-    throw std::runtime_error("POP_LOCAL not yet implemented");
+    if (!inst.index.has_value()) {
+        throw std::runtime_error("POP_LOCAL requires an index field");
+    }
+    Cell operand;
+    operand.i64 = calc_offset(inst);
+    func.code.push_back(operand);
 }
 
 void ParseFunctionObject::plant_push_local(FunctionObject& func, const Instruction& inst) {

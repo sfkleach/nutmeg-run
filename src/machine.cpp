@@ -275,10 +275,11 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
     }
 
     L_POP_LOCAL: {
+        int offset = (pc++)->i64;
         if constexpr (DEBUG_INSTRUCTIONS) {
-            fmt::print("POP_LOCAL\n");
+            fmt::print("POP_LOCAL #{}\n", offset);
         }
-        throw std::runtime_error("POP_LOCAL not implemented yet");
+        get_local_variable(offset) = operand_stack_.pop();
         goto *(pc++)->label_addr;
     }
 
