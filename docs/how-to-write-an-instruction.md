@@ -95,12 +95,15 @@ L_MY_INSTRUCTION: {
 When you implement the planting method in `parse_function_object.cpp`, you need to push these operands into the code stream:
 
 ```cpp
-void ParseFunctionObject::plant_my_instruction(int64_t value) {
-    Cell w1, w2;
-    w1.label_addr = this->machine->get_opcode_map().at(Opcode::MY_INSTRUCTION);
-    w2.i64 = value;
-    this->code.push_back(w1);
-    this->code.push_back(w2);
+void ParseFunctionObject::plant_my_instruction(FunctionObject& func, const Instruction& inst) {
+    // plant_instruction has already pushed the label address for the handler,
+    // so only the operands are planted here.
+    if (!inst.ivalue.has_value()) {
+        throw std::runtime_error("MY_INSTRUCTION requires an ivalue field");
+    }
+    Cell operand;
+    operand.i64 = inst.ivalue.value();
+    func.code.push_back(operand);
 }
 ```
 
@@ -237,7 +240,7 @@ Every instruction **must** end with `goto *(pc++)->label_addr;`. This:
 3. Jumps to that address
 
 Forgetting this will cause the interpreter to fall through to the next label,
-which is never correc (except when forcing code sharing as a "trick").
+which is never correct (except when forcing code sharing as a "trick").
 
 ## Potential Pitfalls
 
@@ -430,17 +433,16 @@ const char* opcode_to_string(Opcode opcode) {
 ```cpp
 class ParseFunctionObject {
     // ... existing methods ...
-    void plant_duplicate();
+    void plant_duplicate(FunctionObject& func, const Instruction& inst);
 };
 ```
 
 ### In parse_function_object.cpp (implementation)
 
 ```cpp
-void ParseFunctionObject::plant_duplicate() {
-    Cell w1;
-    w1.label_addr = this->machine->get_opcode_map().at(Opcode::DUPLICATE);
-    this->code.push_back(w1);
+void ParseFunctionObject::plant_duplicate(FunctionObject& func, const Instruction& inst) {
+    // DUPLICATE has no operands; plant_instruction has already pushed its
+    // label address, so there is nothing more to plant.
 }
 ```
 
