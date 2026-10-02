@@ -19,9 +19,9 @@
 - Implement that method in `parse_function_object.cpp`.
 
 - Now implement the instruction itself in `Machine::threaded_impl` by:
-  - Add a new label `L_CCHECK_COUNT_IS_1` for the code.
+  - Add a new label `L_CHECK_COUNT_IS_1` for the code.
   - Add the code to be executed to that label (inside braces please).
-  - And remember to add a mapping from the opcode to the label in `this->opcode_map`.
+  - And remember to add a mapping from the opcode to the label in `this->opcode_map_`.
 
 ## Point to notes
 
