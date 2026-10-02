@@ -449,6 +449,13 @@ void ParseFunctionObject::validate_forward_references() {
 }
 
 int ParseFunctionObject::calc_offset(const Instruction& inst) {
+    if (inst.index.has_value()) {
+        int index = inst.index.value();
+        if (index < 0 || index >= func_.nlocals) {
+            throw std::runtime_error(fmt::format(
+                "{}: local index {} out of range (nlocals = {})", inst.type, index, func_.nlocals));
+        }
+    }
     return inst.calc_offset(func_.nlocals);
 }
 
