@@ -5,6 +5,8 @@
 #include "function_object.hpp"
 #include "heap.hpp"
 #include "cell_stack.hpp"
+#include "instruction_log.hpp"
+#include "trace.hpp"
 #include <vector>
 #include <unordered_map>
 #include <string>
@@ -38,6 +40,9 @@ private:
 
     // Current function being executed (for local variable access).
     int pc_;  // Program counter.
+
+    // Log of executed instructions (only opened if ENABLE_INSTRUCTION_LOG is set).
+    InstructionLog instruction_log_;
 
     // Threaded interpreter support.
     std::unordered_map<Opcode, void*> opcode_map_;  // Maps opcodes to label addresses.
@@ -115,6 +120,13 @@ public:
 
 private:
     void execute_syscall(const std::string& name, int nargs);
+
+    // Record an executed instruction in the instruction log (compiled out unless enabled).
+    inline void log_instruction(const char* name) {
+        if constexpr (ENABLE_INSTRUCTION_LOG) {
+            instruction_log_.log_opcode(name);
+        }
+    }
 
     // Combined init/run function for threaded interpreter (like Poppy).
     void threaded_impl(std::vector<Cell> *code, bool init_mode);

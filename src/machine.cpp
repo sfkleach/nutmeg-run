@@ -266,6 +266,7 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
     goto *pc++->label_addr;
 
     L_PUSH_VALUE: {
+        log_instruction("PUSH_VALUE");
         Cell value = *pc++;
         if constexpr (DEBUG_INSTRUCTIONS) {
             fmt::print("PUSH_VALUE {}\n", cell_to_string(value));
@@ -275,6 +276,7 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
     }
 
     L_POP_LOCAL: {
+        log_instruction("POP_LOCAL");
         int offset = (pc++)->i64;
         if constexpr (DEBUG_INSTRUCTIONS) {
             fmt::print("POP_LOCAL #{}\n", offset);
@@ -284,6 +286,7 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
     }
 
     L_PUSH_LOCAL: {
+        log_instruction("PUSH_LOCAL");
         int offset = (pc++)->i64;
         if constexpr (DEBUG_INSTRUCTIONS) {
             fmt::print("PUSH_LOCAL #{}\n", offset);
@@ -293,6 +296,7 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
     }
 
     L_IN_PROGRESS: {
+        log_instruction("IN_PROGRESS");
         if constexpr (DEBUG_INSTRUCTIONS) {
             fmt::print("IN_PROGRESS\n");
         }
@@ -305,6 +309,7 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
     }
 
     L_DONE: {
+        log_instruction("DONE");
         if constexpr (DEBUG_INSTRUCTIONS) {
             fmt::print("DONE\n");
         }
@@ -328,6 +333,7 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
     }
 
     L_PUSH_GLOBAL_LAZY: {
+        log_instruction("PUSH_GLOBAL_LAZY");
         if constexpr (DEBUG_INSTRUCTIONS) {
             fmt::print("PUSH_GLOBAL_LAZY\n");
         }
@@ -346,6 +352,7 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
     }
 
     L_PUSH_GLOBAL: {
+        log_instruction("PUSH_GLOBAL");
         if constexpr (DEBUG_INSTRUCTIONS) {
             fmt::print("PUSH_GLOBAL\n");
         }
@@ -355,6 +362,7 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
     }
 
     L_CALL_GLOBAL_COUNTED_LAZY: {
+        log_instruction("CALL_GLOBAL_COUNTED_LAZY");
         if constexpr (DEBUG_INSTRUCTIONS) {
             fmt::print("L_CALL_GLOBAL_COUNTED_LAZY\n");
         }
@@ -375,6 +383,7 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
     }
 
     L_CALL_GLOBAL_COUNTED: {
+        log_instruction("CALL_GLOBAL_COUNTED");
         if constexpr (DEBUG_INSTRUCTIONS) {
             fmt::print("CALL_GLOBAL_COUNTED\n");
         }
@@ -426,6 +435,7 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
     }
 
     L_SYSCALL_COUNTED: {
+        log_instruction("SYSCALL_COUNTED");
         int64_t offset = (pc++)->i64;
         auto value = as_detagged_int(get_local_variable(offset));
         uint64_t count = operand_stack_.size() - as_detagged_int(get_local_variable(offset));
@@ -439,6 +449,7 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
     }
 
     L_STACK_LENGTH: {
+        log_instruction("STACK_LENGTH");
         // Assign the current stack length into the local variable defined by
         // the operand, which is a raw i64.
         int64_t offset = (pc++)->i64;
@@ -451,6 +462,7 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
     }
 
     L_CHECK_BOOL: {
+        log_instruction("CHECK_BOOL");
         // Verify that the stack has grown by exactly 1 since the "before"
         // snapshot and that the top of stack is a boolean value.
         int64_t offset = (pc++)->i64;
@@ -479,6 +491,7 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
     }
 
     L_CHECK_COUNT_IS_1: {
+        log_instruction("CHECK_COUNT_IS_1");
         // Verify that the stack has grown by exactly 1 since the "before"
         // snapshot.
         int64_t offset = (pc++)->i64;
@@ -499,6 +512,7 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
     }
 
     L_GOTO: {
+        log_instruction("GOTO");
         // Unconditional jump. Read the relative offset and adjust pc.
         int64_t offset = (pc++)->i64;
         if constexpr (DEBUG_INSTRUCTIONS) {
@@ -513,6 +527,7 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
     }
 
     L_IF_NOT: {
+        log_instruction("IF_NOT");
         // Conditional jump: jump if top of stack is SPECIAL_FALSE.
         int64_t offset = (pc++)->i64;
 
@@ -542,6 +557,7 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
     }
 
     L_RETURN: {
+        log_instruction("RETURN");
         if constexpr (DEBUG_INSTRUCTIONS) {
             fmt::print("RETURN\n");
         }
@@ -565,6 +581,7 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
     }
 
     L_HALT: {
+        log_instruction("HALT");
         if constexpr (DEBUG_INSTRUCTIONS) {
             fmt::print("HALT\n");
         }
@@ -572,6 +589,7 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
     }
 
     L_LAUNCH: {
+        log_instruction("LAUNCH");
         if constexpr (DEBUG_INSTRUCTIONS) {
             fmt::print("LAUNCH\n");
         }

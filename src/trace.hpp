@@ -9,6 +9,11 @@ namespace nutmeg {
     // Master flag - set to false to disable all debug tracing at compile time.
     inline constexpr bool ENABLE_TRACING = false;
 
+    // Write a JSONL log of every instruction executed to a timestamped file in the
+    // current directory (see instruction_log.hpp). Independent of ENABLE_TRACING.
+    // Set to true only when debugging, as it slows execution enormously.
+    inline constexpr bool ENABLE_INSTRUCTION_LOG = false;
+
     // Instruction execution tracing.
     inline constexpr bool DEBUG_INSTRUCTIONS = ENABLE_TRACING && true;
     inline constexpr bool DEBUG_INSTRUCTIONS_DETAIL = ENABLE_TRACING && false;
