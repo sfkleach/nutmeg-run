@@ -43,3 +43,15 @@ The new format is:
 ```json
 {"opcode": NAME, "onEntry": {"stacklength": M}, "onExit": {"stacklength": N}}
 ```
+
+## Step 4: Opargs
+
+Instructions typically have arguments which are inlined. We want to add these
+to the log-entry, using docs/specs/tagging-scheme.md to interpret their meaning.
+
+- Some arguments are _raw_ and should be reported as a bit-pattern.
+- Bit patterns are rendered in both decimal and hex as "0dNNNN,0xNNNN", using no leading zeros
+- Some arguments are _tagged_ and non-pointer values should be turned into descriptions
+- Pointer values should simply be left as their hex addresses in the form &0xNNNN, skipping leading zeros
+
+
