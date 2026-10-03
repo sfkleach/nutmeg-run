@@ -1,5 +1,6 @@
 #include "heap.hpp"
 #include "value.hpp"
+#include "event_log.hpp"
 #include <cstring>
 #include <fmt/core.h>
 
@@ -15,10 +16,12 @@ Pool::Pool(size_t num_cells)
 
 Cell* Pool::allocate(size_t n) {
     if (next_free_ + n > cells_.size()) {
+        LOG_EVENT("allocate", ev_bool("failed", true), ev_int("cells", n), ev_int("used", next_free_));
         throw std::bad_alloc();
     }
     Cell* result = &cells_[next_free_];
     next_free_ += n;
+    LOG_EVENT("allocate", ev_ptr("address", result), ev_int("cells", n), ev_int("used", next_free_));
     return result;
 }
 

@@ -1,4 +1,5 @@
 #include "machine.hpp"
+#include "event_log.hpp"
 #include "instruction.hpp"
 #include "sysfunctions.hpp"
 #include "parse_function_object.hpp"
@@ -157,7 +158,14 @@ void Machine::execute(Cell* func_obj) {
     if constexpr (TRACE_CODEGEN_DETAILED) {
         fmt::print("About to call threaded_impl\n");
     }
+    if constexpr (ENABLE_EVENTS_LOG) {
+        MachineNames names(*this);
+        LOG_EVENT("launch", ev_str("name", names.function_name(func_obj).value_or("")),
+                  ev_ptr("address", func_obj));
+    }
     threaded_impl(&launcher, false);
+    // Reached only if the program halts normally; after an exception the log just ends.
+    LOG_EVENT("halt");
     if constexpr (TRACE_CODEGEN_DETAILED) {
         fmt::print("Returned from threaded_impl\n");
     }

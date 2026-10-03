@@ -1,5 +1,6 @@
 #include "instruction_log.hpp"
 #include "trace.hpp"
+#include "log_file.hpp"
 #include <chrono>
 #include <ctime>
 #include <cstring>
@@ -8,17 +9,6 @@
 #include <fmt/core.h>
 
 namespace nutmeg {
-
-// Log files are named {LOG_TYPE}.{YYYY-MM-DD-HH.MM.SS}.jsonl, so that they are
-// grouped by function and then sorted by (local) date-time.
-static std::string make_log_filename(const std::string& log_type) {
-    std::time_t t = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
-    std::tm local;
-    localtime_r(&t, &local);
-    char stamp[32];
-    std::strftime(stamp, sizeof(stamp), "%Y-%m-%d-%H.%M.%S", &local);
-    return fmt::format("{}.{}.jsonl", log_type, stamp);
-}
 
 InstructionLog::InstructionLog() {
     if constexpr (ENABLE_INSTRUCTION_LOG) {
@@ -150,12 +140,6 @@ OpArg format_tagged(Cell cell, const OpArgContext& context) {
     return {"", fmt::format("reserved 0x{:x}", cell.u64)};
 }
 
-// A JSON string literal, quoted and escaped. Invalid UTF-8 is replaced rather than thrown on,
-// so the log is always valid JSON.
-static std::string json_quote(const std::string& text) {
-    return nlohmann::json(text).dump(-1, ' ', false, nlohmann::json::error_handler_t::replace);
-}
-
 std::string format_opargs(const Cell* operands, std::initializer_list<OpArgKind> kinds,
                           const OpArgContext& context) {
     std::string result = "[";
@@ -202,7 +186,8 @@ std::string format_exit(size_t stacklength) {
 void InstructionLog::log_entry(const char* name, const Cell* operands,
                                std::initializer_list<OpArgKind> kinds, const OpArgContext& context,
                                size_t stacklength) {
-    out_ << format_entry(++count_, name, format_opargs(operands, kinds, context), stacklength) << std::flush;
+    last_instruction_number = ++count_;
+    out_ << format_entry(count_, name, format_opargs(operands, kinds, context), stacklength) << std::flush;
 }
 
 void InstructionLog::log_exit(size_t stacklength) {

@@ -14,6 +14,11 @@ namespace nutmeg {
     // Set to true only when debugging, as it slows execution enormously.
     inline constexpr bool ENABLE_INSTRUCTION_LOG = false;
 
+    // Write a JSONL log of lifecycle events (loading, entry point, launch, halt, memory
+    // allocations) to events.{timestamp}.jsonl in the current directory (see event_log.hpp).
+    // Independent of ENABLE_INSTRUCTION_LOG.
+    inline constexpr bool ENABLE_EVENTS_LOG = false;
+
     // Instruction execution tracing.
     inline constexpr bool DEBUG_INSTRUCTIONS = ENABLE_TRACING && true;
     inline constexpr bool DEBUG_INSTRUCTIONS_DETAIL = ENABLE_TRACING && false;

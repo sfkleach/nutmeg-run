@@ -10,6 +10,7 @@
 #include "machine.hpp"
 #include "heap.hpp"
 #include "trace.hpp"
+#include "event_log.hpp"
 
 struct CommandLineArgs {
     std::optional<std::string> entry_point;
@@ -111,6 +112,7 @@ int main(int argc, char* argv[]) {
 
         // Open the bundle file.
         nutmeg::BundleReader reader(args.bundle_file);
+        LOG_EVENT("bundle.open", nutmeg::ev_str("file", args.bundle_file));
 
         // Determine which entry point to use.
         std::string entry_point_name;
@@ -132,6 +134,8 @@ int main(int argc, char* argv[]) {
             }
             entry_point_name = entry_points[0];
         }
+        LOG_EVENT("entry.point", nutmeg::ev_str("name", entry_point_name),
+                  nutmeg::ev_str("source", args.entry_point ? "option" : "bundle"));
 
         // Create the machine (initializes threaded interpreter).
         nutmeg::Machine machine;
@@ -158,6 +162,11 @@ int main(int argc, char* argv[]) {
             nutmeg::FunctionObject func = machine.parse_function_object(id_lazy.first, deps, binding.value);
             nutmeg::Cell* func_obj = machine.allocate_function(func.code, func.nlocals, func.nparams);
             machine.define_global(id_lazy.first, make_tagged_ptr(func_obj), binding.lazy);
+            LOG_EVENT("load.binding", nutmeg::ev_str("name", id_lazy.first),
+                      nutmeg::ev_bool("lazy", binding.lazy),
+                      nutmeg::ev_int("instructions", func.code.size()),
+                      nutmeg::ev_int("nlocals", func.nlocals), nutmeg::ev_int("nparams", func.nparams),
+                      nutmeg::ev_ptr("address", func_obj));
             if constexpr (nutmeg::TRACE_MAIN) {
                 fmt::print("  Loaded func_object {}\n", static_cast<void*>(func_obj));
                 fmt::print("  Recovering func object: {}\n", as_detagged_ptr(make_tagged_ptr(func_obj)));

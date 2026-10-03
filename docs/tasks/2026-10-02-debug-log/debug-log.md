@@ -18,7 +18,7 @@ We will proceed step by step. Progress:
 - [x] Step 5
 - [x] Step 6
 - [x] Step 7
-- [ ] Step 8
+- [x] Step 8
 
 
 ## Step 1: Create the log file conditionally and generate a stream of instructions
