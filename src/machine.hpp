@@ -121,13 +121,6 @@ public:
 private:
     void execute_syscall(const std::string& name, int nargs);
 
-    // Record an executed instruction in the instruction log (compiled out unless enabled).
-    inline void log_instruction(const char* name) {
-        if constexpr (ENABLE_INSTRUCTION_LOG) {
-            instruction_log_.log_opcode(name);
-        }
-    }
-
     // Combined init/run function for threaded interpreter (like Poppy).
     void threaded_impl(std::vector<Cell> *code, bool init_mode);
     Cell * LaunchInstruction(Cell *pc);

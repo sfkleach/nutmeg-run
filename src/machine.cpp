@@ -202,6 +202,24 @@ FunctionObject Machine::parse_function_object(const std::string& idname, const s
 
 // Combined init/run function for threaded interpreter (like Poppy's init_or_run).
 //
+// Record entry to / exit from an instruction in the instruction log, with the
+// operand stack length at that point. These are macros, not functions, so that a
+// build with ENABLE_INSTRUCTION_LOG off contains no trace of them: even an empty
+// inline function leaves a call, or at least spilled arguments, in an unoptimised
+// build, and this is on the path executed for every instruction.
+#define LOG_INSTRUCTION_ENTRY(NAME)                                         \
+    do {                                                                    \
+        if constexpr (ENABLE_INSTRUCTION_LOG) {                             \
+            instruction_log_.log_entry(NAME, operand_stack_.size());        \
+        }                                                                   \
+    } while (0)
+#define LOG_INSTRUCTION_EXIT()                                              \
+    do {                                                                    \
+        if constexpr (ENABLE_INSTRUCTION_LOG) {                             \
+            instruction_log_.log_exit(operand_stack_.size());               \
+        }                                                                   \
+    } while (0)
+
 // Key implementation constraint: This must be a SINGLE function handling both
 // initialization and execution phases. In C++, label addresses (&&label) are only
 // valid within the function where they are defined. We cannot capture labels in
@@ -266,37 +284,40 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
     goto *pc++->label_addr;
 
     L_PUSH_VALUE: {
-        log_instruction("PUSH_VALUE");
+        LOG_INSTRUCTION_ENTRY("PUSH_VALUE");
         Cell value = *pc++;
         if constexpr (DEBUG_INSTRUCTIONS) {
             fmt::print("PUSH_VALUE {}\n", cell_to_string(value));
         }
         push(value);
+        LOG_INSTRUCTION_EXIT();
         goto *(pc++)->label_addr;
     }
 
     L_POP_LOCAL: {
-        log_instruction("POP_LOCAL");
+        LOG_INSTRUCTION_ENTRY("POP_LOCAL");
         int offset = (pc++)->i64;
         if constexpr (DEBUG_INSTRUCTIONS) {
             fmt::print("POP_LOCAL #{}\n", offset);
         }
         get_local_variable(offset) = operand_stack_.pop();
+        LOG_INSTRUCTION_EXIT();
         goto *(pc++)->label_addr;
     }
 
     L_PUSH_LOCAL: {
-        log_instruction("PUSH_LOCAL");
+        LOG_INSTRUCTION_ENTRY("PUSH_LOCAL");
         int offset = (pc++)->i64;
         if constexpr (DEBUG_INSTRUCTIONS) {
             fmt::print("PUSH_LOCAL #{}\n", offset);
         }
         operand_stack_.push(get_local_variable(offset));
+        LOG_INSTRUCTION_EXIT();
         goto *(pc++)->label_addr;
     }
 
     L_IN_PROGRESS: {
-        log_instruction("IN_PROGRESS");
+        LOG_INSTRUCTION_ENTRY("IN_PROGRESS");
         if constexpr (DEBUG_INSTRUCTIONS) {
             fmt::print("IN_PROGRESS\n");
         }
@@ -305,11 +326,12 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
             throw std::runtime_error("Recursive evaluation of top-level constants detected");
         }
         ident_ptr->in_progress = true;
+        LOG_INSTRUCTION_EXIT();
         goto *(pc++)->label_addr;
     }
 
     L_DONE: {
-        log_instruction("DONE");
+        LOG_INSTRUCTION_ENTRY("DONE");
         if constexpr (DEBUG_INSTRUCTIONS) {
             fmt::print("DONE\n");
         }
@@ -329,11 +351,12 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
         // Verify the value is now a function pointer.
         heap_.must_be_function_value(ident_ptr->cell);
 
+        LOG_INSTRUCTION_EXIT();
         goto *(pc++)->label_addr;
     }
 
     L_PUSH_GLOBAL_LAZY: {
-        log_instruction("PUSH_GLOBAL_LAZY");
+        LOG_INSTRUCTION_ENTRY("PUSH_GLOBAL_LAZY");
         if constexpr (DEBUG_INSTRUCTIONS) {
             fmt::print("PUSH_GLOBAL_LAZY\n");
         }
@@ -348,21 +371,23 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
             self->ptr = &&L_PUSH_GLOBAL;
             pc = self;
         }
+        LOG_INSTRUCTION_EXIT();
         goto *(pc++)->label_addr;
     }
 
     L_PUSH_GLOBAL: {
-        log_instruction("PUSH_GLOBAL");
+        LOG_INSTRUCTION_ENTRY("PUSH_GLOBAL");
         if constexpr (DEBUG_INSTRUCTIONS) {
             fmt::print("PUSH_GLOBAL\n");
         }
         Ident* ident_ptr = static_cast<Ident*>((pc++)->ptr);
         push(ident_ptr->cell);
+        LOG_INSTRUCTION_EXIT();
         goto *(pc++)->label_addr;
     }
 
     L_CALL_GLOBAL_COUNTED_LAZY: {
-        log_instruction("CALL_GLOBAL_COUNTED_LAZY");
+        LOG_INSTRUCTION_ENTRY("CALL_GLOBAL_COUNTED_LAZY");
         if constexpr (DEBUG_INSTRUCTIONS) {
             fmt::print("L_CALL_GLOBAL_COUNTED_LAZY\n");
         }
@@ -379,11 +404,12 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
             self->ptr = &&L_CALL_GLOBAL_COUNTED;
             pc = self;
         }
+        LOG_INSTRUCTION_EXIT();
         goto *(pc++)->label_addr;
     }
 
     L_CALL_GLOBAL_COUNTED: {
-        log_instruction("CALL_GLOBAL_COUNTED");
+        LOG_INSTRUCTION_ENTRY("CALL_GLOBAL_COUNTED");
         if constexpr (DEBUG_INSTRUCTIONS) {
             fmt::print("CALL_GLOBAL_COUNTED\n");
         }
@@ -431,11 +457,12 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
         // Now pass control to the called function.
         pc = heap_.get_function_code(func_ptr);
 
+        LOG_INSTRUCTION_EXIT();
         goto *(pc++)->label_addr;
     }
 
     L_SYSCALL_COUNTED: {
-        log_instruction("SYSCALL_COUNTED");
+        LOG_INSTRUCTION_ENTRY("SYSCALL_COUNTED");
         int64_t offset = (pc++)->i64;
         auto value = as_detagged_int(get_local_variable(offset));
         uint64_t count = operand_stack_.size() - as_detagged_int(get_local_variable(offset));
@@ -445,11 +472,12 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
         SysFunction sys_function = reinterpret_cast<SysFunction>((pc++)->ptr);
         sys_function(*this, static_cast<int>(count));
 
+        LOG_INSTRUCTION_EXIT();
         goto *(pc++)->label_addr;
     }
 
     L_STACK_LENGTH: {
-        log_instruction("STACK_LENGTH");
+        LOG_INSTRUCTION_ENTRY("STACK_LENGTH");
         // Assign the current stack length into the local variable defined by
         // the operand, which is a raw i64.
         int64_t offset = (pc++)->i64;
@@ -458,11 +486,12 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
             fmt::print("STACK_LENGTH, offset = {}, size = {}\n", offset, operand_stack_.size());
         }
 
+        LOG_INSTRUCTION_EXIT();
         goto *(pc++)->label_addr;
     }
 
     L_CHECK_BOOL: {
-        log_instruction("CHECK_BOOL");
+        LOG_INSTRUCTION_ENTRY("CHECK_BOOL");
         // Verify that the stack has grown by exactly 1 since the "before"
         // snapshot and that the top of stack is a boolean value.
         int64_t offset = (pc++)->i64;
@@ -487,11 +516,12 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
             );
         }
 
+        LOG_INSTRUCTION_EXIT();
         goto *(pc++)->label_addr;
     }
 
     L_CHECK_COUNT_IS_1: {
-        log_instruction("CHECK_COUNT_IS_1");
+        LOG_INSTRUCTION_ENTRY("CHECK_COUNT_IS_1");
         // Verify that the stack has grown by exactly 1 since the "before"
         // snapshot.
         int64_t offset = (pc++)->i64;
@@ -508,11 +538,12 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
             );
         }
 
+        LOG_INSTRUCTION_EXIT();
         goto *(pc++)->label_addr;
     }
 
     L_GOTO: {
-        log_instruction("GOTO");
+        LOG_INSTRUCTION_ENTRY("GOTO");
         // Unconditional jump. Read the relative offset and adjust pc.
         int64_t offset = (pc++)->i64;
         if constexpr (DEBUG_INSTRUCTIONS) {
@@ -523,11 +554,12 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
         pc += offset;
 
         // Jump to the instruction at the target.
+        LOG_INSTRUCTION_EXIT();
         goto *pc++->label_addr;
     }
 
     L_IF_NOT: {
-        log_instruction("IF_NOT");
+        LOG_INSTRUCTION_ENTRY("IF_NOT");
         // Conditional jump: jump if top of stack is SPECIAL_FALSE.
         int64_t offset = (pc++)->i64;
 
@@ -553,11 +585,12 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
         }
 
         // Continue execution at the (possibly adjusted) pc.
+        LOG_INSTRUCTION_EXIT();
         goto *pc++->label_addr;
     }
 
     L_RETURN: {
-        log_instruction("RETURN");
+        LOG_INSTRUCTION_ENTRY("RETURN");
         if constexpr (DEBUG_INSTRUCTIONS) {
             fmt::print("RETURN\n");
         }
@@ -577,19 +610,21 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
         pc = static_cast<Cell*>(return_cell.ptr);
 
         // Continue execution at return address.
+        LOG_INSTRUCTION_EXIT();
         goto *pc++->label_addr;
     }
 
     L_HALT: {
-        log_instruction("HALT");
+        LOG_INSTRUCTION_ENTRY("HALT");
         if constexpr (DEBUG_INSTRUCTIONS) {
             fmt::print("HALT\n");
         }
+        LOG_INSTRUCTION_EXIT();
         return;
     }
 
     L_LAUNCH: {
-        log_instruction("LAUNCH");
+        LOG_INSTRUCTION_ENTRY("LAUNCH");
         if constexpr (DEBUG_INSTRUCTIONS) {
             fmt::print("LAUNCH\n");
         }
@@ -597,6 +632,7 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
         if constexpr (DEBUG_INSTRUCTIONS_DETAIL) {
             fmt::print("&&L_STACK_LENGTH = {}, new pc = {}\n", static_cast<void*>(&&L_STACK_LENGTH), static_cast<void*>(pc));
         }
+        LOG_INSTRUCTION_EXIT();
         goto *pc++->label_addr;
     }
 
@@ -702,5 +738,8 @@ Cell * Machine::LaunchInstruction(Cell *pc)
     }
     return pc;
 }
+
+#undef LOG_INSTRUCTION_ENTRY
+#undef LOG_INSTRUCTION_EXIT
 
 } // namespace nutmeg

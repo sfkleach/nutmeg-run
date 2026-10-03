@@ -28,10 +28,22 @@ InstructionLog::InstructionLog() {
     }
 }
 
-void InstructionLog::log_opcode(const char* name) {
-    // Flush every line: the log is most valuable when the machine crashes, and
-    // buffered output would lose the final (most interesting) instructions.
-    out_ << "{\"opcode\": \"" << name << "\"}\n" << std::flush;
+std::string format_entry(const char* name, size_t stacklength) {
+    return fmt::format("{{\"opcode\": \"{}\", \"onEntry\": {{\"stacklength\": {}}}", name, stacklength);
+}
+
+std::string format_exit(size_t stacklength) {
+    return fmt::format(", \"onExit\": {{\"stacklength\": {}}}}}\n", stacklength);
+}
+
+// Flush after every half-line: the log is most valuable when the machine crashes,
+// and buffered output would lose the final (most interesting) instructions.
+void InstructionLog::log_entry(const char* name, size_t stacklength) {
+    out_ << format_entry(name, stacklength) << std::flush;
+}
+
+void InstructionLog::log_exit(size_t stacklength) {
+    out_ << format_exit(stacklength) << std::flush;
 }
 
 } // namespace nutmeg

@@ -31,3 +31,15 @@ log files to be distinguished by their function and datetime.
 
 - The new format is `{LOG_TYPE}.{YYYY-MM-DD-HH.MM.SS}.jsonl`, using local time
 - The LOG_TYPE for the instructions log is `run`
+
+## Step 3: Add before-and-after stack length
+
+Augment the instruction-log-entry format. It should capture the stack length
+at the entry point of the instruction and the exit point and report both.
+This must incur no run-time penalty when the logging is disabled.
+
+The new format is:
+
+```json
+{"opcode": NAME, "onEntry": {"stacklength": M}, "onExit": {"stacklength": N}}
+```
