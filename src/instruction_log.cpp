@@ -96,7 +96,26 @@ static std::string read_string(const Cell* obj, Heap& heap) {
     return std::string(data, strnlen(data, length));
 }
 
-OpArg format_tagged(Cell cell, Heap& heap) {
+std::string format_global(const void* ident, const NameResolver& names) {
+    std::optional<GlobalInfo> info = names.global_at(ident);
+    if (!info) {
+        return format_pointer(ident);
+    }
+    return (info->is_function ? "fn " : "global ") + info->name;
+}
+
+std::string format_function(const Cell* function_object, const NameResolver& names) {
+    std::optional<std::string> name = names.function_name(function_object);
+    return name ? "fn " + *name : format_pointer(function_object);
+}
+
+std::string format_syscall(const void* function, const NameResolver& names) {
+    std::optional<std::string> name = names.sys_function_name(function);
+    return name ? "sys " + *name : format_pointer(function);
+}
+
+OpArg format_tagged(Cell cell, const OpArgContext& context) {
+    Heap& heap = context.heap;
     if (is_tagged_int(cell)) {
         return {"", fmt::format("int {}", as_detagged_int(cell))};
     }
@@ -112,6 +131,11 @@ OpArg format_tagged(Cell cell, Heap& heap) {
         const char* type = type_name(obj, heap);
         if (obj[0].ptr == heap.get_string_datakey() && obj != heap.get_string_datakey()) {
             return {type, shorten_string(read_string(obj, heap))};
+        }
+        if (obj[0].ptr == heap.get_function_datakey() && obj != heap.get_function_datakey()) {
+            if (std::optional<std::string> name = context.names.function_name(obj)) {
+                return {"", "fn " + *name};
+            }
         }
         return {type, format_pointer(obj)};
     }
@@ -133,7 +157,7 @@ static std::string json_quote(const std::string& text) {
 }
 
 std::string format_opargs(const Cell* operands, std::initializer_list<OpArgKind> kinds,
-                          Heap& heap, int nlocals) {
+                          const OpArgContext& context) {
     std::string result = "[";
     size_t i = 0;
     for (OpArgKind kind : kinds) {
@@ -143,9 +167,14 @@ std::string format_opargs(const Cell* operands, std::initializer_list<OpArgKind>
         OpArg arg;
         switch (kind) {
             case OpArgKind::Raw: arg.text = format_raw(operands[i].u64); break;
-            case OpArgKind::Local: arg.text = format_local(operands[i].u64, nlocals); break;
-            case OpArgKind::Tagged: arg = format_tagged(operands[i], heap); break;
+            case OpArgKind::Local: arg.text = format_local(operands[i].u64, context.nlocals); break;
+            case OpArgKind::Tagged: arg = format_tagged(operands[i], context); break;
             case OpArgKind::Pointer: arg.text = format_pointer(operands[i].ptr); break;
+            case OpArgKind::Global: arg.text = format_global(operands[i].ptr, context.names); break;
+            case OpArgKind::Function:
+                arg.text = format_function(static_cast<const Cell*>(operands[i].ptr), context.names);
+                break;
+            case OpArgKind::Syscall: arg.text = format_syscall(operands[i].ptr, context.names); break;
         }
         if (arg.key.empty()) {
             result += json_quote(arg.text);
@@ -169,9 +198,9 @@ std::string format_exit(size_t stacklength) {
 // Flush after every half-line: the log is most valuable when the machine crashes,
 // and buffered output would lose the final (most interesting) instructions.
 void InstructionLog::log_entry(const char* name, const Cell* operands,
-                               std::initializer_list<OpArgKind> kinds, Heap& heap, int nlocals,
+                               std::initializer_list<OpArgKind> kinds, const OpArgContext& context,
                                size_t stacklength) {
-    out_ << format_entry(name, format_opargs(operands, kinds, heap, nlocals), stacklength) << std::flush;
+    out_ << format_entry(name, format_opargs(operands, kinds, context), stacklength) << std::flush;
 }
 
 void InstructionLog::log_exit(size_t stacklength) {

@@ -22,8 +22,27 @@ public:
 };
 
 
+class Machine;
+
+// Resolves addresses to names for the instruction log, by reverse lookup in the machine's
+// global dictionary (which maps names to Idents) and in the sys-functions table. Neither
+// Ident nor function objects store a name, so these are linear scans; that is acceptable
+// for a debugging aid, and keeps the cost out of the machine proper.
+class MachineNames : public NameResolver {
+public:
+    explicit MachineNames(Machine& machine) : machine_(machine) {}
+
+    std::optional<GlobalInfo> global_at(const void* ident) const override;
+    std::optional<std::string> function_name(const Cell* function_object) const override;
+    std::optional<std::string> sys_function_name(const void* function) const override;
+
+private:
+    Machine& machine_;
+};
+
 // The virtual machine with dual-stack architecture.
 class Machine {
+    friend class MachineNames;
 private:
     // Operand stack (main data stack).
     CellStack operand_stack_;

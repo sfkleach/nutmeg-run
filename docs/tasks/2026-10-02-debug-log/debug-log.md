@@ -13,6 +13,10 @@ We will proceed step by step. Progress:
 
 - [x] Step 1
 - [x] Step 2
+- [x] Step 3
+- [x] Step 4
+- [x] Step 5
+- [ ] Step 6
 
 
 ## Step 1: Create the log file conditionally and generate a stream of instructions
@@ -68,3 +72,10 @@ In this step we improve the formatting of some oparg values.
 - Other reference (tagged pointer) values should be prefixed with 
   the name of the type (datakey) and the rest of the contents as as we
   print them already.
+
+## Step 6: Printing functions correctly
+
+Some instructions call functions and their opargs are tagged pointers to
+the functions. These opargs should be printed as "fn NAME", where NAME is
+the name of the function, if it is available.
+

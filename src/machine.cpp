@@ -214,9 +214,53 @@ int Machine::log_frame_nlocals() {
     return heap_.get_function_nlocals(func_obj);
 }
 
+// Reverse lookups for the instruction log. Where several names are bound to the same function
+// the smallest is used, so that the output does not depend on the dictionary's iteration order.
+static void keep_smaller(std::optional<std::string>& best, const std::string& name) {
+    if (!best || name < *best) {
+        best = name;
+    }
+}
+
+std::optional<GlobalInfo> MachineNames::global_at(const void* ident) const {
+    // Compare addresses only: an operand is not dereferenced until it is known to be an Ident.
+    for (const auto& [name, candidate] : machine_.globals_) {
+        if (candidate == ident) {
+            bool is_function = false;
+            if (!candidate->lazy && is_tagged_ptr(candidate->cell)) {
+                Cell* obj = static_cast<Cell*>(as_detagged_ptr(candidate->cell));
+                is_function = machine_.heap_.get_pool()->contains(obj) && machine_.heap_.is_function_object(obj);
+            }
+            return GlobalInfo{name, is_function};
+        }
+    }
+    return std::nullopt;
+}
+
+std::optional<std::string> MachineNames::function_name(const Cell* function_object) const {
+    std::optional<std::string> best;
+    for (const auto& [name, candidate] : machine_.globals_) {
+        if (!candidate->lazy && is_tagged_ptr(candidate->cell) &&
+            as_detagged_ptr(candidate->cell) == function_object) {
+            keep_smaller(best, name);
+        }
+    }
+    return best;
+}
+
+std::optional<std::string> MachineNames::sys_function_name(const void* function) const {
+    std::optional<std::string> best;
+    for (const auto& [name, candidate] : sysfunctions_table) {
+        if (reinterpret_cast<const void*>(candidate) == function) {
+            keep_smaller(best, name);
+        }
+    }
+    return best;
+}
+
 // Record entry to / exit from an instruction in the instruction log, with the
 // operand stack length at that point. LOG_INSTRUCTION_ENTRY also takes the kinds of
-// the operands inlined after the label word (OP_RAW, OP_LOCAL, OP_TAGGED or OP_PTR, in order,
+// the operands inlined after the label word (OP_RAW, OP_LOCAL, OP_TAGGED, OP_GLOBAL, ... in order,
 // none for an instruction without operands) and, as it must be the first statement
 // of a handler, reads them from the local variable pc. These are macros, not functions, so that a
 // build with ENABLE_INSTRUCTION_LOG off contains no trace of them: even an empty
@@ -225,9 +269,10 @@ int Machine::log_frame_nlocals() {
 #define LOG_INSTRUCTION_ENTRY(NAME, ...)                                    \
     do {                                                                    \
         if constexpr (ENABLE_INSTRUCTION_LOG) {                             \
-            instruction_log_.log_entry(NAME, pc, {__VA_ARGS__}, heap_,      \
-                                       log_frame_nlocals(),                 \
-                                       operand_stack_.size());              \
+            MachineNames log_names(*this);                                  \
+            instruction_log_.log_entry(NAME, pc, {__VA_ARGS__},             \
+                OpArgContext{heap_, log_frame_nlocals(), log_names},        \
+                operand_stack_.size());                                     \
         }                                                                   \
     } while (0)
 #define LOG_INSTRUCTION_EXIT()                                              \
@@ -334,7 +379,7 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
     }
 
     L_IN_PROGRESS: {
-        LOG_INSTRUCTION_ENTRY("IN_PROGRESS", OP_PTR);
+        LOG_INSTRUCTION_ENTRY("IN_PROGRESS", OP_GLOBAL);
         if constexpr (DEBUG_INSTRUCTIONS) {
             fmt::print("IN_PROGRESS\n");
         }
@@ -348,7 +393,7 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
     }
 
     L_DONE: {
-        LOG_INSTRUCTION_ENTRY("DONE", OP_LOCAL, OP_PTR);
+        LOG_INSTRUCTION_ENTRY("DONE", OP_LOCAL, OP_GLOBAL);
         if constexpr (DEBUG_INSTRUCTIONS) {
             fmt::print("DONE\n");
         }
@@ -373,7 +418,7 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
     }
 
     L_PUSH_GLOBAL_LAZY: {
-        LOG_INSTRUCTION_ENTRY("PUSH_GLOBAL_LAZY", OP_PTR);
+        LOG_INSTRUCTION_ENTRY("PUSH_GLOBAL_LAZY", OP_GLOBAL);
         if constexpr (DEBUG_INSTRUCTIONS) {
             fmt::print("PUSH_GLOBAL_LAZY\n");
         }
@@ -393,7 +438,7 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
     }
 
     L_PUSH_GLOBAL: {
-        LOG_INSTRUCTION_ENTRY("PUSH_GLOBAL", OP_PTR);
+        LOG_INSTRUCTION_ENTRY("PUSH_GLOBAL", OP_GLOBAL);
         if constexpr (DEBUG_INSTRUCTIONS) {
             fmt::print("PUSH_GLOBAL\n");
         }
@@ -404,7 +449,7 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
     }
 
     L_CALL_GLOBAL_COUNTED_LAZY: {
-        LOG_INSTRUCTION_ENTRY("CALL_GLOBAL_COUNTED_LAZY", OP_LOCAL, OP_PTR);
+        LOG_INSTRUCTION_ENTRY("CALL_GLOBAL_COUNTED_LAZY", OP_LOCAL, OP_GLOBAL);
         if constexpr (DEBUG_INSTRUCTIONS) {
             fmt::print("L_CALL_GLOBAL_COUNTED_LAZY\n");
         }
@@ -426,7 +471,7 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
     }
 
     L_CALL_GLOBAL_COUNTED: {
-        LOG_INSTRUCTION_ENTRY("CALL_GLOBAL_COUNTED", OP_LOCAL, OP_PTR);
+        LOG_INSTRUCTION_ENTRY("CALL_GLOBAL_COUNTED", OP_LOCAL, OP_GLOBAL);
         if constexpr (DEBUG_INSTRUCTIONS) {
             fmt::print("CALL_GLOBAL_COUNTED\n");
         }
@@ -479,7 +524,7 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
     }
 
     L_SYSCALL_COUNTED: {
-        LOG_INSTRUCTION_ENTRY("SYSCALL_COUNTED", OP_LOCAL, OP_PTR);
+        LOG_INSTRUCTION_ENTRY("SYSCALL_COUNTED", OP_LOCAL, OP_SYSCALL);
         int64_t offset = (pc++)->i64;
         auto value = as_detagged_int(get_local_variable(offset));
         uint64_t count = operand_stack_.size() - as_detagged_int(get_local_variable(offset));
@@ -641,7 +686,7 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
     }
 
     L_LAUNCH: {
-        LOG_INSTRUCTION_ENTRY("LAUNCH", OP_PTR);
+        LOG_INSTRUCTION_ENTRY("LAUNCH", OP_FUNCTION);
         if constexpr (DEBUG_INSTRUCTIONS) {
             fmt::print("LAUNCH\n");
         }
