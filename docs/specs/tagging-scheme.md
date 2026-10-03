@@ -7,7 +7,7 @@ The bottom three bits have this interpretation:
 | x00  | A 62-bit integer |
 | x10  | a 62-bit floating point number |
 | 001  | a 64-bit pointer, with offset of 1, aligned to 8-byte boundaries |
-| 011  | Reserved |
+| 011  | Reserved | 
 | 101  | Reserved |
 | 111  | Special literal    values |
 
@@ -17,3 +17,8 @@ odd numbers use tag 001.
 
 So although the payload is only 61-bits, the integer-values that are represented
 are a full 62-bits because of this use of bit-2.
+
+## Design note
+
+Const pointers are going to be very important in the implementation. I should
+consider making 011 mean a 64-bit pointer to a const object.
