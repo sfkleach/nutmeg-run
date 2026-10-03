@@ -6,6 +6,7 @@
 #include <initializer_list>
 #include <fstream>
 #include <string>
+#include "heap.hpp"
 #include "value.hpp"
 
 namespace nutmeg {
@@ -13,21 +14,48 @@ namespace nutmeg {
 // How an inlined operand cell in the code stream is to be interpreted and rendered.
 enum class OpArgKind {
     Raw,      // An uninterpreted 64-bit pattern: "0d<signed decimal>,0x<hex>".
-    Tagged,   // A tagged value (see docs/specs/tagging-scheme.md): a description, or &0x<hex> for pointers.
+    Local,    // A frame offset naming a local variable: "local <index>".
+    Tagged,   // A tagged value (see docs/specs/tagging-scheme.md).
     Pointer,  // An untagged C++ pointer: "&0x<hex>".
 };
 inline constexpr OpArgKind OP_RAW = OpArgKind::Raw;
+inline constexpr OpArgKind OP_LOCAL = OpArgKind::Local;
 inline constexpr OpArgKind OP_TAGGED = OpArgKind::Tagged;
 inline constexpr OpArgKind OP_PTR = OpArgKind::Pointer;
 
-// Renderings of a single operand (without the surrounding JSON quotes). None of them
-// can contain a quote or backslash, so no JSON escaping is needed.
+// A rendered operand. If `key` is empty it is a description, written as a JSON string
+// containing `text`. Otherwise it is a reference to a heap object, written as the object
+// {"key": KEY, "value": TEXT} where KEY is the name of the object's type (its datakey).
+struct OpArg {
+    std::string key;
+    std::string text;
+};
+
+// Renderings of a single operand. The text is unquoted and unescaped.
 std::string format_raw(uint64_t bits);
 std::string format_pointer(const void* ptr);
-std::string format_tagged(Cell cell);
 
-// Renders the operands that start at `operands`, one per kind, as a JSON array of strings.
-std::string format_opargs(const Cell* operands, std::initializer_list<OpArgKind> kinds);
+// `offset` is the frame offset planted in the code; `nlocals` is the number of locals of
+// the function being executed, or -1 if unknown. The result is "local <index>", where
+// index is the local's number as the compiler knows it (offset = nlocals - index + 2).
+// If the index cannot be recovered the result is "local offset <offset>".
+std::string format_local(uint64_t offset, int nlocals);
+
+// Strings are shortened if they have more than MAX_STRING_CHARS characters (UTF-8 code
+// points): the first KEPT_STRING_CHARS are kept and "..." is appended.
+inline constexpr size_t MAX_STRING_CHARS = 16;
+inline constexpr size_t KEPT_STRING_CHARS = 13;
+std::string shorten_string(const std::string& text);
+
+// Tagged values: ints, floats and special literals are described; a pointer to a heap
+// object is {key: type name, value: contents}, where the contents of a string are the
+// (shortened) text and the contents of any other object are its address. A pointer that
+// does not point into the heap is never followed and has key "unknown".
+OpArg format_tagged(Cell cell, Heap& heap);
+
+// Renders the operands that start at `operands`, one per kind, as a JSON array.
+std::string format_opargs(const Cell* operands, std::initializer_list<OpArgKind> kinds,
+                          Heap& heap, int nlocals);
 
 // The two halves of a log line. A line is
 //   {"opcode": NAME, "opargs": [...], "onEntry": {...}, "onExit": {...}}
@@ -47,10 +75,11 @@ public:
     InstructionLog& operator=(const InstructionLog&) = delete;
 
     // Called on entry to an instruction. `operands` points at the instruction's inlined
-    // operands, which are described by `kinds`. Writes the first half of the line and
-    // flushes it.
+    // operands, which are described by `kinds`; `heap` is needed to interpret pointers and
+    // `nlocals` (or -1 if unknown) to interpret local variables. Writes the first half of
+    // the line and flushes it.
     void log_entry(const char* name, const Cell* operands, std::initializer_list<OpArgKind> kinds,
-                   size_t stacklength);
+                   Heap& heap, int nlocals, size_t stacklength);
 
     // Called on exit from the instruction. Writes the second half of the line and flushes it.
     //

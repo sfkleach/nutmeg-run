@@ -54,4 +54,17 @@ to the log-entry, using docs/specs/tagging-scheme.md to interpret their meaning.
 - Some arguments are _tagged_ and non-pointer values should be turned into descriptions
 - Pointer values should simply be left as their hex addresses in the form &0xNNNN, skipping leading zeros
 
+## Step 5: Improve the opargs formatting
 
+In this step we improve the formatting of some oparg values.
+
+- Instructions whose opargs represent local variables supply these as raw
+  offsets. Please report this as "local DDD", where DDD is the decimal offsets.
+
+- Strings are given as tagged pointers. Please format this as a JSON string. 
+  However if the string is longer than 16 characters, reduce it to 13 characters
+  and append "...".
+
+- Other reference (tagged pointer) values should be prefixed with 
+  the name of the type (datakey) and the rest of the contents as as we
+  print them already.

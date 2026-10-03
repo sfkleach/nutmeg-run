@@ -202,9 +202,21 @@ FunctionObject Machine::parse_function_object(const std::string& idname, const s
 
 // Combined init/run function for threaded interpreter (like Poppy's init_or_run).
 //
+int Machine::log_frame_nlocals() {
+    // The frame is [return address][function object][locals...], with the return address on top.
+    if (return_stack_.size() < 2) {
+        return -1;
+    }
+    Cell* func_obj = static_cast<Cell*>(get_frame_function_object().ptr);
+    if (!heap_.get_pool()->contains(func_obj)) {
+        return -1;
+    }
+    return heap_.get_function_nlocals(func_obj);
+}
+
 // Record entry to / exit from an instruction in the instruction log, with the
 // operand stack length at that point. LOG_INSTRUCTION_ENTRY also takes the kinds of
-// the operands inlined after the label word (OP_RAW, OP_TAGGED or OP_PTR, in order,
+// the operands inlined after the label word (OP_RAW, OP_LOCAL, OP_TAGGED or OP_PTR, in order,
 // none for an instruction without operands) and, as it must be the first statement
 // of a handler, reads them from the local variable pc. These are macros, not functions, so that a
 // build with ENABLE_INSTRUCTION_LOG off contains no trace of them: even an empty
@@ -213,7 +225,8 @@ FunctionObject Machine::parse_function_object(const std::string& idname, const s
 #define LOG_INSTRUCTION_ENTRY(NAME, ...)                                    \
     do {                                                                    \
         if constexpr (ENABLE_INSTRUCTION_LOG) {                             \
-            instruction_log_.log_entry(NAME, pc, {__VA_ARGS__},             \
+            instruction_log_.log_entry(NAME, pc, {__VA_ARGS__}, heap_,      \
+                                       log_frame_nlocals(),                 \
                                        operand_stack_.size());              \
         }                                                                   \
     } while (0)
@@ -299,7 +312,7 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
     }
 
     L_POP_LOCAL: {
-        LOG_INSTRUCTION_ENTRY("POP_LOCAL", OP_RAW);
+        LOG_INSTRUCTION_ENTRY("POP_LOCAL", OP_LOCAL);
         int offset = (pc++)->i64;
         if constexpr (DEBUG_INSTRUCTIONS) {
             fmt::print("POP_LOCAL #{}\n", offset);
@@ -310,7 +323,7 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
     }
 
     L_PUSH_LOCAL: {
-        LOG_INSTRUCTION_ENTRY("PUSH_LOCAL", OP_RAW);
+        LOG_INSTRUCTION_ENTRY("PUSH_LOCAL", OP_LOCAL);
         int offset = (pc++)->i64;
         if constexpr (DEBUG_INSTRUCTIONS) {
             fmt::print("PUSH_LOCAL #{}\n", offset);
@@ -335,7 +348,7 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
     }
 
     L_DONE: {
-        LOG_INSTRUCTION_ENTRY("DONE", OP_RAW, OP_PTR);
+        LOG_INSTRUCTION_ENTRY("DONE", OP_LOCAL, OP_PTR);
         if constexpr (DEBUG_INSTRUCTIONS) {
             fmt::print("DONE\n");
         }
@@ -391,7 +404,7 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
     }
 
     L_CALL_GLOBAL_COUNTED_LAZY: {
-        LOG_INSTRUCTION_ENTRY("CALL_GLOBAL_COUNTED_LAZY", OP_RAW, OP_PTR);
+        LOG_INSTRUCTION_ENTRY("CALL_GLOBAL_COUNTED_LAZY", OP_LOCAL, OP_PTR);
         if constexpr (DEBUG_INSTRUCTIONS) {
             fmt::print("L_CALL_GLOBAL_COUNTED_LAZY\n");
         }
@@ -413,7 +426,7 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
     }
 
     L_CALL_GLOBAL_COUNTED: {
-        LOG_INSTRUCTION_ENTRY("CALL_GLOBAL_COUNTED", OP_RAW, OP_PTR);
+        LOG_INSTRUCTION_ENTRY("CALL_GLOBAL_COUNTED", OP_LOCAL, OP_PTR);
         if constexpr (DEBUG_INSTRUCTIONS) {
             fmt::print("CALL_GLOBAL_COUNTED\n");
         }
@@ -466,7 +479,7 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
     }
 
     L_SYSCALL_COUNTED: {
-        LOG_INSTRUCTION_ENTRY("SYSCALL_COUNTED", OP_RAW, OP_PTR);
+        LOG_INSTRUCTION_ENTRY("SYSCALL_COUNTED", OP_LOCAL, OP_PTR);
         int64_t offset = (pc++)->i64;
         auto value = as_detagged_int(get_local_variable(offset));
         uint64_t count = operand_stack_.size() - as_detagged_int(get_local_variable(offset));
@@ -481,7 +494,7 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
     }
 
     L_STACK_LENGTH: {
-        LOG_INSTRUCTION_ENTRY("STACK_LENGTH", OP_RAW);
+        LOG_INSTRUCTION_ENTRY("STACK_LENGTH", OP_LOCAL);
         // Assign the current stack length into the local variable defined by
         // the operand, which is a raw i64.
         int64_t offset = (pc++)->i64;
@@ -495,7 +508,7 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
     }
 
     L_CHECK_BOOL: {
-        LOG_INSTRUCTION_ENTRY("CHECK_BOOL", OP_RAW);
+        LOG_INSTRUCTION_ENTRY("CHECK_BOOL", OP_LOCAL);
         // Verify that the stack has grown by exactly 1 since the "before"
         // snapshot and that the top of stack is a boolean value.
         int64_t offset = (pc++)->i64;
@@ -525,7 +538,7 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
     }
 
     L_CHECK_COUNT_IS_1: {
-        LOG_INSTRUCTION_ENTRY("CHECK_COUNT_IS_1", OP_RAW);
+        LOG_INSTRUCTION_ENTRY("CHECK_COUNT_IS_1", OP_LOCAL);
         // Verify that the stack has grown by exactly 1 since the "before"
         // snapshot.
         int64_t offset = (pc++)->i64;

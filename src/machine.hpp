@@ -121,6 +121,10 @@ public:
 private:
     void execute_syscall(const std::string& name, int nargs);
 
+    // The number of locals of the function being executed, or -1 if there is no frame yet.
+    // Used only by the instruction log.
+    int log_frame_nlocals();
+
     // Combined init/run function for threaded interpreter (like Poppy).
     void threaded_impl(std::vector<Cell> *code, bool init_mode);
     Cell * LaunchInstruction(Cell *pc);
