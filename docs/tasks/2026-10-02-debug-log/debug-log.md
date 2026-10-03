@@ -16,7 +16,9 @@ We will proceed step by step. Progress:
 - [x] Step 3
 - [x] Step 4
 - [x] Step 5
-- [ ] Step 6
+- [x] Step 6
+- [x] Step 7
+- [ ] Step 8
 
 
 ## Step 1: Create the log file conditionally and generate a stream of instructions
@@ -78,4 +80,25 @@ In this step we improve the formatting of some oparg values.
 Some instructions call functions and their opargs are tagged pointers to
 the functions. These opargs should be printed as "fn NAME", where NAME is
 the name of the function, if it is available.
+
+## Step 7: Instruction number
+
+Each instruction executed is numbered in the log entry. This is to simplify
+cross-checking instruction streams against events. Add a field to hold a 
+number indicating this - I expect it to exactly correlate with the line number
+in the JSONL file.
+
+## Step 8: Lifecycle events
+
+As any program runs there are a series of notable landmark events. We want
+a flag in `trace.hpp` to turn on the logging of these events `ENABLE_EVENTS_LOG`.
+
+- We want the file name to be `events.{YYYY-MM-DD-HH.MM.SS}.jsonl`
+- This feature should have zero runtime performance when disabled.
+- It should log 
+  - loading the code from the bundle.
+  - finding the entry point.
+  - launching the program
+  - memory allocations
+
 

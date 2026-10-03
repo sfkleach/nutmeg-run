@@ -55,11 +55,12 @@ nlohmann::json tagged_element(Cell cell, Heap& heap) {
 } // namespace
 
 TEST_CASE("Instruction log entry and exit halves join into a valid JSON line", "[instruction_log]") {
-    std::string line = format_entry("PUSH_LOCAL", "[\"local 3\"]", 3) + format_exit(4);
+    std::string line = format_entry(7, "PUSH_LOCAL", "[\"local 3\"]", 3) + format_exit(4);
 
     REQUIRE(line.back() == '\n');
     auto j = nlohmann::json::parse(line);
-    REQUIRE(j.size() == 4);
+    REQUIRE(j.size() == 5);
+    REQUIRE(j.at("n") == 7);
     REQUIRE(j.at("opcode") == "PUSH_LOCAL");
     REQUIRE(j.at("opargs") == nlohmann::json::array({"local 3"}));
     REQUIRE(j.at("onEntry").at("stacklength") == 3);
@@ -67,13 +68,13 @@ TEST_CASE("Instruction log entry and exit halves join into a valid JSON line", "
 }
 
 TEST_CASE("Instruction log line has the documented layout", "[instruction_log]") {
-    REQUIRE(format_entry("HALT", "[]", 0) + format_exit(0) ==
-        "{\"opcode\": \"HALT\", \"opargs\": [], \"onEntry\": {\"stacklength\": 0}, "
+    REQUIRE(format_entry(1, "HALT", "[]", 0) + format_exit(0) ==
+        "{\"n\": 1, \"opcode\": \"HALT\", \"opargs\": [], \"onEntry\": {\"stacklength\": 0}, "
         "\"onExit\": {\"stacklength\": 0}}\n");
 }
 
 TEST_CASE("Instruction log entry half is a truncated line without a newline", "[instruction_log]") {
-    std::string half = format_entry("CHECK_BOOL", "[\"local 1\"]", 7);
+    std::string half = format_entry(2, "CHECK_BOOL", "[\"local 1\"]", 7);
     REQUIRE(half.find('\n') == std::string::npos);
     REQUIRE(half.find("onExit") == std::string::npos);
     REQUIRE(half.find("opargs") != std::string::npos);

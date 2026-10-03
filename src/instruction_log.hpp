@@ -107,10 +107,12 @@ std::string format_opargs(const Cell* operands, std::initializer_list<OpArgKind>
                           const OpArgContext& context);
 
 // The two halves of a log line. A line is
-//   {"opcode": NAME, "opargs": [...], "onEntry": {...}, "onExit": {...}}
+//   {"n": N, "opcode": NAME, "opargs": [...], "onEntry": {...}, "onExit": {...}}
 // and is written in two parts (see InstructionLog). NAME must be a plain identifier
-// as no escaping is done. `opargs` is the text produced by format_opargs.
-std::string format_entry(const char* name, const std::string& opargs, size_t stacklength);
+// as no escaping is done. `opargs` is the text produced by format_opargs. `number` is
+// the 1-based position of the instruction in the run, which is also its line number.
+std::string format_entry(uint64_t number, const char* name, const std::string& opargs,
+                         size_t stacklength);
 std::string format_exit(size_t stacklength);
 
 // Streams one JSON object per line (JSONL) to a file, one line for every
@@ -142,6 +144,7 @@ public:
 private:
     std::string filename_;
     std::ofstream out_;
+    uint64_t count_ = 0;  // instructions logged so far
 };
 
 } // namespace nutmeg

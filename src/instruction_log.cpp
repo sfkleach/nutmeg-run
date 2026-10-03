@@ -186,9 +186,11 @@ std::string format_opargs(const Cell* operands, std::initializer_list<OpArgKind>
     return result + "]";
 }
 
-std::string format_entry(const char* name, const std::string& opargs, size_t stacklength) {
-    return fmt::format("{{\"opcode\": \"{}\", \"opargs\": {}, \"onEntry\": {{\"stacklength\": {}}}",
-                       name, opargs, stacklength);
+std::string format_entry(uint64_t number, const char* name, const std::string& opargs,
+                         size_t stacklength) {
+    return fmt::format("{{\"n\": {}, \"opcode\": \"{}\", \"opargs\": {}, "
+                       "\"onEntry\": {{\"stacklength\": {}}}",
+                       number, name, opargs, stacklength);
 }
 
 std::string format_exit(size_t stacklength) {
@@ -200,7 +202,7 @@ std::string format_exit(size_t stacklength) {
 void InstructionLog::log_entry(const char* name, const Cell* operands,
                                std::initializer_list<OpArgKind> kinds, const OpArgContext& context,
                                size_t stacklength) {
-    out_ << format_entry(name, format_opargs(operands, kinds, context), stacklength) << std::flush;
+    out_ << format_entry(++count_, name, format_opargs(operands, kinds, context), stacklength) << std::flush;
 }
 
 void InstructionLog::log_exit(size_t stacklength) {
