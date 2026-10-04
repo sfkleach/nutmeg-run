@@ -5,6 +5,9 @@
 #include <stdexcept>
 #include <cstddef>
 #include <algorithm>
+#include <new>
+#include <sys/mman.h>
+#include <unistd.h>
 
 namespace nutmeg {
 
@@ -12,31 +15,80 @@ namespace nutmeg {
 // Set to false for maximum performance in production builds.
 constexpr bool ENABLE_STACK_CHECKS = true;
 
+// Whether a stack is surrounded by guard pages.
+enum class Guard {
+    None,   // Plain heap array.
+    Pages,  // A protected page below the first cell and another above the last (see CellStack).
+};
+
 // Lightweight stack implementation for VM stacks.
 // Uses a fixed-size backing array with pointer-based operations.
 // Much more efficient than std::vector for push/pop at the end.
+//
+// With Guard::Pages the storage is one anonymous mapping laid out in whole pages:
+//
+//   | guard page (PROT_NONE) | data pages (read/write) | guard page (PROT_NONE) |
+//                            ^ base_                   ^ limit_
+//
+// so a push past the top or a pop/peek below the bottom faults (SIGSEGV) instead of touching
+// neighbouring memory. The guard pages are a backstop behind the software checks, which still
+// give the better error message, and which are still needed for the multi-cell operations
+// since a large count can jump over a one-page guard. The capacity is rounded up to a whole
+// number of pages so that the top guard begins exactly at limit_.
 class CellStack {
-private:
+public:
     static constexpr size_t DEFAULT_CAPACITY = 65536;  // 64K cells.
-    Cell* data_;           // Backing array.
+
+private:
+    Cell* data_;           // Start of the allocation: the array, or the lower guard page.
     Cell* top_;            // Points to next free slot.
     Cell* base_;           // Points to start of array.
     Cell* limit_;          // Points one past end of array.
     size_t capacity_;
+    size_t mapping_bytes_; // Size of the mapping, or 0 if the stack is a plain array.
+
+    // Maps guard page + data pages + guard page and makes only the data pages accessible.
+    // Sets data_, base_, limit_ and mapping_bytes_. Throws std::bad_alloc on failure.
+    void map_with_guards() {
+        const size_t page = static_cast<size_t>(sysconf(_SC_PAGESIZE));
+        const size_t data_bytes = (capacity_ * sizeof(Cell) + page - 1) / page * page;
+        capacity_ = data_bytes / sizeof(Cell);
+        mapping_bytes_ = page + data_bytes + page;
+        void* mapping = mmap(nullptr, mapping_bytes_, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+        if (mapping == MAP_FAILED) {
+            throw std::bad_alloc();
+        }
+        char* data = static_cast<char*>(mapping) + page;
+        if (mprotect(data, data_bytes, PROT_READ | PROT_WRITE) != 0) {
+            munmap(mapping, mapping_bytes_);
+            throw std::bad_alloc();
+        }
+        data_ = static_cast<Cell*>(mapping);
+        base_ = reinterpret_cast<Cell*>(data);
+        limit_ = base_ + capacity_;
+    }
 
 public:
-    // Constructor with optional capacity.
-    explicit CellStack(size_t capacity = DEFAULT_CAPACITY)
-        : capacity_(capacity) {
-        data_ = new Cell[capacity_];
-        base_ = data_;
-        top_ = data_;
-        limit_ = data_ + capacity_;
+    // Constructor with optional capacity (in cells) and guard mode.
+    explicit CellStack(size_t capacity = DEFAULT_CAPACITY, Guard guard = Guard::None)
+        : capacity_(capacity), mapping_bytes_(0) {
+        if (guard == Guard::Pages) {
+            map_with_guards();
+        } else {
+            data_ = new Cell[capacity_];
+            base_ = data_;
+            limit_ = data_ + capacity_;
+        }
+        top_ = base_;
     }
 
     // Destructor.
     ~CellStack() {
-        delete[] data_;
+        if (mapping_bytes_ != 0) {
+            munmap(data_, mapping_bytes_);
+        } else {
+            delete[] data_;
+        }
     }
 
     // Delete copy constructor and assignment (stacks shouldn't be copied).

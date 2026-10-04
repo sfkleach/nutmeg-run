@@ -12,7 +12,7 @@ and then catching overflow and attempting to grow the value stack.
 
 
 ## Step 1: Add guard pages at the base & top of the value stack
-- [ ] Status
+- [x] Status
 
 The value stack should be topped and tailed by a pair of guard pages which are
 write protected. This means that any attempt to under/overflow the abstract 

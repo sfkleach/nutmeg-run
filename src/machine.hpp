@@ -44,8 +44,8 @@ private:
 class Machine {
     friend class MachineNames;
 private:
-    // Operand stack (main data stack).
-    CellStack operand_stack_;
+    // Operand stack (main data stack). Surrounded by guard pages.
+    CellStack operand_stack_{CellStack::DEFAULT_CAPACITY, Guard::Pages};
 
     // Return stack (for function calls and local variables).
     CellStack return_stack_;
