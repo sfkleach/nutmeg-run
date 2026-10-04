@@ -386,20 +386,6 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
         goto *(pc++)->label_addr;
     }
 
-    L_IN_PROGRESS: {
-        LOG_INSTRUCTION_ENTRY("IN_PROGRESS", OP_GLOBAL);
-        if constexpr (DEBUG_INSTRUCTIONS) {
-            fmt::print("IN_PROGRESS\n");
-        }
-        Ident* ident_ptr = static_cast<Ident*>(pc->ptr);
-        if (ident_ptr->in_progress) {
-            throw std::runtime_error("Recursive evaluation of top-level constants detected");
-        }
-        ident_ptr->in_progress = true;
-        LOG_INSTRUCTION_EXIT();
-        goto *(pc++)->label_addr;
-    }
-
     L_DONE: {
         LOG_INSTRUCTION_ENTRY("DONE", OP_LOCAL, OP_GLOBAL);
         if constexpr (DEBUG_INSTRUCTIONS) {
@@ -418,9 +404,6 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
         ident_ptr->in_progress = false;
         ident_ptr->lazy = false;
 
-        // Verify the value is now a function pointer.
-        heap_.must_be_function_value(ident_ptr->cell);
-
         LOG_INSTRUCTION_EXIT();
         goto *(pc++)->label_addr;
     }
@@ -433,6 +416,11 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
         Cell * self = pc - 1;
         Ident* ident_ptr = static_cast<Ident*>((pc++)->ptr);
         if (ident_ptr->lazy) {
+            // A thunk that (indirectly) refers to its own constant would never finish.
+            if (ident_ptr->in_progress) {
+                throw std::runtime_error("Recursive evaluation of top-level constants detected");
+            }
+            ident_ptr->in_progress = true;
             // This sets the PC to the first instruction of the function object.
             pc = call_function_object(pc, get_function_ptr(ident_ptr->cell), 0);
         } else {
@@ -465,6 +453,11 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
         int64_t offset = (pc++)->i64;
         Ident* ident_ptr = static_cast<Ident*>((pc++)->ptr);
         if (ident_ptr->lazy) {
+            // A thunk that (indirectly) refers to its own constant would never finish.
+            if (ident_ptr->in_progress) {
+                throw std::runtime_error("Recursive evaluation of top-level constants detected");
+            }
+            ident_ptr->in_progress = true;
             // Skip the check that any parameters are being passed. Will be zero.
             // This sets the PC to the first instruction of the function object.
             pc = call_function_object(pc, get_function_ptr(ident_ptr->cell), 0);
