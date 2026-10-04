@@ -31,7 +31,7 @@ For this step arrange that the value stack can be grown. We will require
 tests showing this works.
 
 ## Step 3: Catch overflow and grow the stack
-- [ ] Status
+- [x] Status
 
 When there is an attempt to write into the guard page, we should try to 
 grow the value stack. If we succeed we should retry the instruction that 
