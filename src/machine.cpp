@@ -372,7 +372,7 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
     L_PUSH_LOCAL: {
         LOG_INSTRUCTION_ENTRY("PUSH_LOCAL", OP_LOCAL);
         int offset = (pc++)->i64;
-        operand_stack_.push(get_local_variable(offset));
+        push(get_local_variable(offset));
         LOG_INSTRUCTION_EXIT();
         goto *(pc++)->label_addr;
     }

@@ -9,6 +9,7 @@
 #include <span>
 #include <limits>
 #include "stack_config.hpp"
+#include "guard_fault.hpp"
 #include <sys/mman.h>
 #include <unistd.h>
 
@@ -86,6 +87,24 @@ private:
     size_t mapping_bytes_; // Size of the mapping, or 0 if the stack is a plain array.
     size_t page_;          // Page size, for growing.
 
+    // Guarded stacks are kept in a list so that the fault handler can find the one that faulted.
+    CellStack* guarded_prev_ = nullptr;
+    CellStack* guarded_next_ = nullptr;
+    static inline CellStack* guarded_head_ = nullptr;
+
+    friend struct CellStackTestAccess;  // Lets tests reach the private slow path.
+
+    void link_guarded() {
+        guarded_next_ = guarded_head_;
+        if (guarded_head_ != nullptr) guarded_head_->guarded_prev_ = this;
+        guarded_head_ = this;
+    }
+    void unlink_guarded() {
+        if (guarded_prev_ != nullptr) guarded_prev_->guarded_next_ = guarded_next_;
+        else guarded_head_ = guarded_next_;
+        if (guarded_next_ != nullptr) guarded_next_->guarded_prev_ = guarded_prev_;
+    }
+
     // Maps guard + reserve + guard and commits only the first capacity_ cells.
     // Sets data_, base_, limit_, capacity_, reserve_cells_ and mapping_bytes_. Throws
     // std::bad_alloc on failure.
@@ -114,7 +133,14 @@ private:
 
     // Slow path of the software checks: makes room for `needed_cells` in all, by growing, or
     // throws std::runtime_error(message).
+    //
+    // It reads capacity_ afresh first: a software check may have loaded a limit_ that the fault
+    // handler has since moved, and that must not cause a spurious growth or, with the reserve
+    // used up, a spurious error.
     [[gnu::cold, gnu::noinline]] void make_room(size_t needed_cells, const char* message) {
+        if (needed_cells <= capacity_) {
+            return;
+        }
         if (!try_grow(needed_cells)) {
             throw std::runtime_error(message);
         }
@@ -129,6 +155,8 @@ public:
           page_(static_cast<size_t>(sysconf(_SC_PAGESIZE))) {
         if (guard == Guard::Pages) {
             map_with_guards(reserve);
+            install_guard_fault_handler();
+            link_guarded();
         } else {
             data_ = new Cell[capacity_];
             base_ = data_;
@@ -140,6 +168,7 @@ public:
     // Destructor.
     ~CellStack() {
         if (mapping_bytes_ != 0) {
+            unlink_guarded();
             munmap(data_, mapping_bytes_);
         } else {
             delete[] data_;
@@ -183,6 +212,43 @@ public:
         if (!try_grow(min_cells)) {
             throw std::runtime_error("Stack overflow: reserve exhausted");
         }
+    }
+
+    // What the fault handler found when asked about a faulting address (see guard_fault.hpp).
+    enum class GuardFault {
+        NotAGuard,  // The address is not in the top guard page of any guarded stack.
+        Repaired,   // It was, and the stack has been grown: the store can be retried.
+        Exhausted,  // It was, but the stack cannot grow: the reserve is used up.
+    };
+
+    // Called by the fault handler: if `address` is in the top guard page of this stack (the page
+    // at limit_), grows the stack. Allocation-free and throws nothing.
+    GuardFault repair_fault(const void* address) noexcept {
+        const char* where = static_cast<const char*>(address);
+        const char* guard = reinterpret_cast<const char*>(limit_);
+        if (where < guard || where >= guard + page_) {
+            return GuardFault::NotAGuard;
+        }
+        return try_grow() ? GuardFault::Repaired : GuardFault::Exhausted;
+    }
+
+    // Called by the fault handler: looks for the guarded stack whose top guard holds `address`.
+    static GuardFault repair_guard_fault(const void* address) noexcept {
+        for (CellStack* stack = guarded_head_; stack != nullptr; stack = stack->guarded_next_) {
+            GuardFault outcome = stack->repair_fault(address);
+            if (outcome != GuardFault::NotAGuard) {
+                return outcome;
+            }
+        }
+        return GuardFault::NotAGuard;
+    }
+
+    // Push a value onto the stack with no check for overflow. On a guarded stack that is safe:
+    // a store past the committed part runs into the guard page, the fault handler grows the
+    // stack, and the store is retried. If the reserve is used up the process is killed (after a
+    // message). Never use it on an unguarded stack.
+    inline void push_unchecked(Cell value) {
+        *top_++ = value;
     }
 
     // Push a value onto the stack.

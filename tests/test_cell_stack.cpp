@@ -4,13 +4,13 @@
 #include <functional>
 #include <limits>
 #include <csignal>
-#include <sys/resource.h>
-#include <sys/wait.h>
 #include <unistd.h>
 #include "../src/cell_stack.hpp"
 #include "../src/machine.hpp"
+#include "fork_helpers.hpp"
 
 using namespace nutmeg;
+using nutmeg_test::signal_from;
 
 namespace {
 
@@ -20,28 +20,6 @@ size_t one_page_of_cells() {
 }
 
 Cell int_cell(int64_t value) { return make_tagged_int(value); }
-
-// Runs `action` in a child process and returns the signal that killed it, or 0 if it
-// survived. A test cannot survive its own SIGSEGV, so faults are provoked in a child. The
-// child must not run the test framework or atexit handlers, so it ends with _exit.
-int signal_from(const std::function<void()>& action) {
-    pid_t pid = fork();
-    REQUIRE(pid >= 0);
-    if (pid == 0) {
-        // Catch2 installs fatal-signal handlers that would print a bogus failure report from the
-        // child; restore the default action so the child just dies with the signal.
-        for (int sig : {SIGSEGV, SIGBUS, SIGABRT}) {
-            signal(sig, SIG_DFL);
-        }
-        struct rlimit no_core = {0, 0};
-        setrlimit(RLIMIT_CORE, &no_core);  // No core file or crash reporter for a deliberate crash.
-        action();
-        _exit(0);
-    }
-    int status = 0;
-    REQUIRE(waitpid(pid, &status, 0) == pid);
-    return WIFSIGNALED(status) ? WTERMSIG(status) : 0;
-}
 
 void fill(CellStack& stack, size_t count) {
     for (size_t i = 0; i < count; i++) {
@@ -371,15 +349,34 @@ TEST_CASE("A fully grown stack is guarded just past the end of its reserve", "[c
 }
 
 TEST_CASE("The Machine's value stack grows and has the configured limit", "[cell_stack][grow]") {
-    Machine machine;
-    if constexpr (ENABLE_STACK_CHECKS) {
-        const size_t initial = VALUE_STACK_INITIAL_BYTES / sizeof(Cell);
-        const size_t reserve = VALUE_STACK_RESERVE_BYTES / sizeof(Cell);
+    const size_t initial = VALUE_STACK_INITIAL_BYTES / sizeof(Cell);
+    const size_t reserve = VALUE_STACK_RESERVE_BYTES / sizeof(Cell);
+    {
+        Machine machine;
         for (size_t i = 0; i < initial + 1000; i++) {
             machine.push(int_cell(static_cast<int64_t>(i)));
         }
         REQUIRE(machine.stack_size() == initial + 1000);
         REQUIRE(as_detagged_int(machine.peek_at(initial + 999)) == static_cast<int64_t>(initial + 999));
+        while (machine.stack_size() < reserve) {
+            machine.push(int_cell(0));
+        }
+        REQUIRE(machine.stack_size() == reserve);
+    }
+
+    // One more is fatal with an unchecked push (the handler cannot throw), but an ordinary,
+    // catchable overflow with a checked one.
+    if constexpr (VALUE_STACK_HARDWARE_GROWTH) {
+        auto result = nutmeg_test::run_in_child([&] {
+            Machine machine;
+            for (size_t i = 0; i <= reserve; i++) {
+                machine.push(int_cell(0));
+            }
+        }, nutmeg_test::Handlers::Keep);
+        REQUIRE(result.signal == SIGSEGV);
+        REQUIRE(result.error_text.find("value stack overflow") != std::string::npos);
+    } else if constexpr (ENABLE_STACK_CHECKS) {
+        Machine machine;
         while (machine.stack_size() < reserve) {
             machine.push(int_cell(0));
         }

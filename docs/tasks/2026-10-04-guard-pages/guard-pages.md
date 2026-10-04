@@ -21,7 +21,7 @@ machine stack is detected and prevented.
 Add unit tests showing this works.
 
 ## Step 2: Add a facility for growing the value stack
-- [ ] Status
+- [x] Status
 
 The value stack can potentially grow very large in some applications. So it
 is important that we can expand the value stack (although we won't be shrinking

@@ -27,6 +27,12 @@ inline constexpr size_t VALUE_STACK_RESERVE_BYTES = 64 * 1024 * 1024;
 inline constexpr std::array<size_t, 2> VALUE_STACK_GROWTH_COEFFICIENTS = {1, 0};
 inline constexpr size_t VALUE_STACK_GROWTH_ADD_BYTES = 0;
 
+// Whether pushes on the value stack skip the software overflow check and rely on the guard page:
+// running into it makes the fault handler (guard_fault.hpp) grow the stack. Faster, but when the
+// reserve is used up the process is killed with SIGSEGV after a message, where a checked push
+// throws std::runtime_error("Stack overflow"). The return stack always keeps its check.
+inline constexpr bool VALUE_STACK_HARDWARE_GROWTH = true;
+
 static_assert(VALUE_STACK_INITIAL_BYTES > 0, "The value stack must start with some room");
 static_assert(VALUE_STACK_RESERVE_BYTES >= VALUE_STACK_INITIAL_BYTES,
               "The value stack reserve must be at least its initial size");

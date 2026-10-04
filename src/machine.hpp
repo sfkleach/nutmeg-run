@@ -76,7 +76,11 @@ public:
 
     // Stack operations.
     inline void push(Cell value) {
-        operand_stack_.push(value);
+        if constexpr (VALUE_STACK_HARDWARE_GROWTH) {
+            operand_stack_.push_unchecked(value);
+        } else {
+            operand_stack_.push(value);
+        }
     }
     inline Cell pop() {
         return operand_stack_.pop();
