@@ -140,25 +140,29 @@ Exceptions will unwind the stack back to the `try/catch` block in `main()`. The 
 
 ## Debugging Support
 
-Use the `DEBUG_INSTRUCTIONS` compile-time constant to add trace output that can be enabled/disabled.
+Every handler is logged by the instruction log (`ENABLE_INSTRUCTION_LOG` in `trace.hpp`),
+which writes one JSON line per executed instruction to `run.{timestamp}.jsonl`. There is no
+separate debug printing to write: just call the two logging macros.
 
-### Pattern for debug output
+### Pattern for logging
 
 ```cpp
 L_MY_INSTRUCTION: {
+    LOG_INSTRUCTION_ENTRY("MY_INSTRUCTION", OP_RAW);   // First line: name, then one kind per operand.
     int64_t operand = (pc++)->i64;
-    
-    if constexpr (DEBUG_INSTRUCTIONS) {
-        fmt::print("MY_INSTRUCTION operand = {}\n", operand);
-    }
-    
+
     // Instruction implementation...
-    
+
+    LOG_INSTRUCTION_EXIT();                             // Immediately before the final goto (or return).
     goto *(pc++)->label_addr;
 }
 ```
 
-The `if constexpr` means the debug code is completely eliminated when `DEBUG_INSTRUCTIONS` is false, so there's zero runtime overhead.
+`LOG_INSTRUCTION_ENTRY` records the opcode, its operands (interpreted by the kinds you list:
+`OP_RAW`, `OP_LOCAL`, `OP_TAGGED`, `OP_PTR`, `OP_GLOBAL`, `OP_FUNCTION`, `OP_SYSCALL`; none
+for an instruction without operands) and the operand-stack length; `LOG_INSTRUCTION_EXIT`
+records the stack length afterwards. Both are placed in an `if constexpr`, so with the flag
+off nothing is compiled in and there is zero runtime overhead.
 
 ### What to print
 
@@ -210,24 +214,25 @@ The interpreter uses computed goto for efficient dispatch. This is why every ins
 
 ```cpp
 L_MY_INSTRUCTION: {
-    // 1. Read immediate operands (if any)
+    // 1. Log the entry, naming the kind of each immediate operand
+    LOG_INSTRUCTION_ENTRY("MY_INSTRUCTION", OP_RAW);
+
+    // 2. Read immediate operands (if any)
     int64_t operand = (pc++)->i64;
     
-    // 2. Pop input values from stack (if needed)
+    // 3. Pop input values from stack (if needed)
     Cell input = pop();
     
-    // 3. Perform computation
+    // 4. Perform computation
     Cell result = compute_something(input, operand);
     
-    // 4. Push result onto stack (if any)
+    // 5. Push result onto stack (if any)
     operand_stack_.push(result);
     
-    // 5. Debug output (if enabled)
-    if constexpr (DEBUG_INSTRUCTIONS) {
-        fmt::print("MY_INSTRUCTION completed\n");
-    }
+    // 6. Log the exit
+    LOG_INSTRUCTION_EXIT();
     
-    // 6. Jump to next instruction
+    // 7. Jump to next instruction
     goto *(pc++)->label_addr;
 }
 ```
@@ -457,9 +462,7 @@ opcode_map_ = {
 
 // In the main dispatch loop:
 L_DUPLICATE: {
-    if constexpr (DEBUG_INSTRUCTIONS) {
-        fmt::print("DUPLICATE, stack size = {}\n", operand_stack_.size());
-    }
+    LOG_INSTRUCTION_ENTRY("DUPLICATE");
     
     // Check we have at least one value to duplicate. (Defensive check
     // appropriate because duplicating an empty stack is a clear error).
@@ -470,6 +473,7 @@ L_DUPLICATE: {
     Cell value = operand_stack_.peek();
     operand_stack_.push(value);
     
+    LOG_INSTRUCTION_EXIT();
     goto *(pc++)->label_addr;
 }
 ```

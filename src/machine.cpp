@@ -356,9 +356,6 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
     L_PUSH_VALUE: {
         LOG_INSTRUCTION_ENTRY("PUSH_VALUE", OP_TAGGED);
         Cell value = *pc++;
-        if constexpr (DEBUG_INSTRUCTIONS) {
-            fmt::print("PUSH_VALUE {}\n", cell_to_string(value));
-        }
         push(value);
         LOG_INSTRUCTION_EXIT();
         goto *(pc++)->label_addr;
@@ -367,9 +364,6 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
     L_POP_LOCAL: {
         LOG_INSTRUCTION_ENTRY("POP_LOCAL", OP_LOCAL);
         int offset = (pc++)->i64;
-        if constexpr (DEBUG_INSTRUCTIONS) {
-            fmt::print("POP_LOCAL #{}\n", offset);
-        }
         get_local_variable(offset) = operand_stack_.pop();
         LOG_INSTRUCTION_EXIT();
         goto *(pc++)->label_addr;
@@ -378,9 +372,6 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
     L_PUSH_LOCAL: {
         LOG_INSTRUCTION_ENTRY("PUSH_LOCAL", OP_LOCAL);
         int offset = (pc++)->i64;
-        if constexpr (DEBUG_INSTRUCTIONS) {
-            fmt::print("PUSH_LOCAL #{}\n", offset);
-        }
         operand_stack_.push(get_local_variable(offset));
         LOG_INSTRUCTION_EXIT();
         goto *(pc++)->label_addr;
@@ -388,9 +379,6 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
 
     L_DONE: {
         LOG_INSTRUCTION_ENTRY("DONE", OP_LOCAL, OP_GLOBAL);
-        if constexpr (DEBUG_INSTRUCTIONS) {
-            fmt::print("DONE\n");
-        }
         // Get the count of arguments from the local variable.
         int64_t offset = (pc++)->i64;
         uint64_t count = operand_stack_.size() - as_detagged_int(get_local_variable(offset));
@@ -410,9 +398,6 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
 
     L_PUSH_GLOBAL_LAZY: {
         LOG_INSTRUCTION_ENTRY("PUSH_GLOBAL_LAZY", OP_GLOBAL);
-        if constexpr (DEBUG_INSTRUCTIONS) {
-            fmt::print("PUSH_GLOBAL_LAZY\n");
-        }
         Cell * self = pc - 1;
         Ident* ident_ptr = static_cast<Ident*>((pc++)->ptr);
         if (ident_ptr->lazy) {
@@ -435,9 +420,6 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
 
     L_PUSH_GLOBAL: {
         LOG_INSTRUCTION_ENTRY("PUSH_GLOBAL", OP_GLOBAL);
-        if constexpr (DEBUG_INSTRUCTIONS) {
-            fmt::print("PUSH_GLOBAL\n");
-        }
         Ident* ident_ptr = static_cast<Ident*>((pc++)->ptr);
         push(ident_ptr->cell);
         LOG_INSTRUCTION_EXIT();
@@ -446,9 +428,6 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
 
     L_CALL_GLOBAL_COUNTED_LAZY: {
         LOG_INSTRUCTION_ENTRY("CALL_GLOBAL_COUNTED_LAZY", OP_LOCAL, OP_GLOBAL);
-        if constexpr (DEBUG_INSTRUCTIONS) {
-            fmt::print("L_CALL_GLOBAL_COUNTED_LAZY\n");
-        }
         Cell * self = pc - 1;
         int64_t offset = (pc++)->i64;
         Ident* ident_ptr = static_cast<Ident*>((pc++)->ptr);
@@ -473,9 +452,6 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
 
     L_CALL_GLOBAL_COUNTED: {
         LOG_INSTRUCTION_ENTRY("CALL_GLOBAL_COUNTED", OP_LOCAL, OP_GLOBAL);
-        if constexpr (DEBUG_INSTRUCTIONS) {
-            fmt::print("CALL_GLOBAL_COUNTED\n");
-        }
 
         // Get the count of arguments from the local variable.
         int64_t offset = (pc++)->i64;
@@ -529,9 +505,6 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
         int64_t offset = (pc++)->i64;
         auto value = as_detagged_int(get_local_variable(offset));
         uint64_t count = operand_stack_.size() - as_detagged_int(get_local_variable(offset));
-        if constexpr (DEBUG_INSTRUCTIONS) {
-            fmt::print("SYSCALL_COUNTED, offset={}, value={}, stack_size={}, count={}\n", offset, value, operand_stack_.size(), count);
-        }
         SysFunction sys_function = reinterpret_cast<SysFunction>((pc++)->ptr);
         sys_function(*this, static_cast<int>(count));
 
@@ -545,9 +518,6 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
         // the operand, which is a raw i64.
         int64_t offset = (pc++)->i64;
         get_local_variable(offset) = make_tagged_int(static_cast<int64_t>(operand_stack_.size()));
-        if constexpr (DEBUG_INSTRUCTIONS) {
-            fmt::print("STACK_LENGTH, offset = {}, size = {}\n", offset, operand_stack_.size());
-        }
 
         LOG_INSTRUCTION_EXIT();
         goto *(pc++)->label_addr;
@@ -560,9 +530,6 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
         int64_t offset = (pc++)->i64;
         int64_t before_size = as_detagged_int(get_local_variable(offset));
         int64_t current_size = static_cast<int64_t>(operand_stack_.size());
-        if constexpr (DEBUG_INSTRUCTIONS) {
-            fmt::print("CHECK_BOOL, offset = {}, before = {}, current = {}\n", offset, before_size, current_size);
-        }
 
         // Check that exactly one value was pushed.
         if (current_size != before_size + 1) {
@@ -590,9 +557,6 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
         int64_t offset = (pc++)->i64;
         int64_t before_size = as_detagged_int(get_local_variable(offset));
         int64_t current_size = static_cast<int64_t>(operand_stack_.size());
-        if constexpr (DEBUG_INSTRUCTIONS) {
-            fmt::print("CHECK_COUNT_IS_1, offset = {}, before = {}, current = {}\n", offset, before_size, current_size);
-        }
 
         // Check that exactly one value was pushed.
         if (current_size != before_size + 1) {
@@ -609,9 +573,6 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
         LOG_INSTRUCTION_ENTRY("GOTO", OP_RAW);
         // Unconditional jump. Read the relative offset and adjust pc.
         int64_t offset = (pc++)->i64;
-        if constexpr (DEBUG_INSTRUCTIONS) {
-            fmt::print("GOTO, offset = {}\n", offset);
-        }
 
         // Apply the offset to pc. The offset is relative to the current pc position.
         pc += offset;
@@ -629,22 +590,10 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
         // Pop the condition from the stack.
         Cell condition = pop();
 
-        if constexpr (DEBUG_INSTRUCTIONS) {
-            fmt::print("IF_NOT, offset = {}, condition = {}\n", offset, cell_to_string(condition));
-        }
-
         // Check if the condition is false.
         if (condition.u64 == SPECIAL_FALSE.u64) {
             // Condition is false - take the jump.
             pc += offset;
-            if constexpr (DEBUG_INSTRUCTIONS) {
-                fmt::print("  Taking jump to offset {}\n", offset);
-            }
-        } else {
-            // Condition is not false - fall through (no jump).
-            if constexpr (DEBUG_INSTRUCTIONS) {
-                fmt::print("  Not taking jump, falling through\n");
-            }
         }
 
         // Continue execution at the (possibly adjusted) pc.
@@ -654,9 +603,6 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
 
     L_RETURN: {
         LOG_INSTRUCTION_ENTRY("RETURN");
-        if constexpr (DEBUG_INSTRUCTIONS) {
-            fmt::print("RETURN\n");
-        }
         // Clean up stack frame: [return_address][func_obj][local_0]...[local_nlocals-1]
 
         // Restore return address (raw).
@@ -679,22 +625,13 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
 
     L_HALT: {
         LOG_INSTRUCTION_ENTRY("HALT");
-        if constexpr (DEBUG_INSTRUCTIONS) {
-            fmt::print("HALT\n");
-        }
         LOG_INSTRUCTION_EXIT();
         return;
     }
 
     L_LAUNCH: {
         LOG_INSTRUCTION_ENTRY("LAUNCH", OP_FUNCTION);
-        if constexpr (DEBUG_INSTRUCTIONS) {
-            fmt::print("LAUNCH\n");
-        }
         pc = LaunchInstruction(pc);
-        if constexpr (DEBUG_INSTRUCTIONS_DETAIL) {
-            fmt::print("&&L_STACK_LENGTH = {}, new pc = {}\n", static_cast<void*>(&&L_STACK_LENGTH), static_cast<void*>(pc));
-        }
         LOG_INSTRUCTION_EXIT();
         goto *pc++->label_addr;
     }
@@ -757,17 +694,6 @@ Cell * Machine::LaunchInstruction(Cell *pc)
     Cell *func_obj = static_cast<Cell *>((pc++)->ptr);
 
     // Display the structure of the function object for debugging.
-    if constexpr (DEBUG_INSTRUCTIONS_DETAIL) {
-        fmt::print("Length of instructions: {}\n", as_detagged_int(func_obj[-2]));
-        fmt::print("T-block length: {}\n", as_detagged_int(func_obj[-1]));
-        fmt::print("FunctionDataKey: {}\n", static_cast<void*>(func_obj[0].ptr));
-        fmt::print("NLocals: {}\n", heap_.get_function_nlocals(func_obj));
-        fmt::print("NParams: {}\n", heap_.get_function_nparams(func_obj));
-        for (int i = 0; i < as_detagged_int(func_obj[-2]); i++) {
-            Cell instr = heap_.get_function_code(func_obj)[i];
-            fmt::print("Instruction[{}]: label_addr={}\n", i, static_cast<void*>(instr.label_addr));
-        }
-    }
 
     // Get function metadata.
     auto [nextras, nparams] = heap_.get_function_extras_and_params(func_obj);
@@ -793,12 +719,6 @@ Cell * Machine::LaunchInstruction(Cell *pc)
 
     // Set pc to function code (caller will do the goto).
     pc = heap_.get_function_code(func_obj);
-    if constexpr (DEBUG_INSTRUCTIONS_DETAIL) {
-        fmt::print("LaunchInstruction: func_obj={}, returned pc={}\n", static_cast<void*>(func_obj), static_cast<void*>(pc));
-        if (pc == func_obj) {
-            fmt::print("ERROR: get_function_code returned func_obj itself!\n");
-        }
-    }
     return pc;
 }
 

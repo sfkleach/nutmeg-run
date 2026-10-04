@@ -19,10 +19,6 @@ namespace nutmeg {
     // Independent of ENABLE_INSTRUCTION_LOG.
     inline constexpr bool ENABLE_EVENTS_LOG = false;
 
-    // Instruction execution tracing.
-    inline constexpr bool DEBUG_INSTRUCTIONS = ENABLE_TRACING && true;
-    inline constexpr bool DEBUG_INSTRUCTIONS_DETAIL = ENABLE_TRACING && false;
-
     // Code generation and planting tracing.
     inline constexpr bool TRACE_PLANT_INSTRUCTIONS = ENABLE_TRACING && true;
     inline constexpr bool TRACE_CODEGEN = ENABLE_TRACING && false;
