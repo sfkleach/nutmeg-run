@@ -249,6 +249,32 @@ TEST_CASE("A string object with a damaged length does not read outside the heap"
     REQUIRE(tagged(make_tagged_ptr(obj), heap).text == "");
 }
 
+TEST_CASE("IF_THEN_ELSE logs its two offsets as raw operands", "[instruction_log]") {
+    Heap heap;
+    Cell operands[2];
+    operands[0] = make_raw_i64(3);    // The then-offset, forward.
+    operands[1] = make_raw_i64(-5);   // The else-offset, backward.
+
+    REQUIRE(opargs(operands, {OP_RAW, OP_RAW}, heap, -1) ==
+            "[\"0d3,0x3\", \"0d-5,0xfffffffffffffffb\"]");
+
+    std::string line = format_entry(4, "IF_THEN_ELSE", opargs(operands, {OP_RAW, OP_RAW}, heap, -1), 2) +
+                       format_exit(1);
+    auto j = nlohmann::json::parse(line);
+    REQUIRE(j.at("opcode") == "IF_THEN_ELSE");
+    REQUIRE(j.at("opargs") == nlohmann::json::array({"0d3,0x3", "0d-5,0xfffffffffffffffb"}));
+    REQUIRE(j.at("onEntry").at("stacklength") == 2);
+    REQUIRE(j.at("onExit").at("stacklength") == 1);
+}
+
+TEST_CASE("Instructions without operands log an empty opargs", "[instruction_log]") {
+    Heap heap;
+    for (const char* name : {"ERASE", "IF_NOT_RETURN", "IF_SO_RETURN"}) {
+        auto j = nlohmann::json::parse(format_entry(1, name, opargs(nullptr, {}, heap, -1), 1) + format_exit(0));
+        REQUIRE(j.at("opargs") == nlohmann::json::array());
+    }
+}
+
 TEST_CASE("Opargs are rendered in order, one per kind", "[instruction_log]") {
     Heap heap;
     Cell operands[4];

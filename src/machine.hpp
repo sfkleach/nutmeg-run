@@ -97,6 +97,10 @@ public:
     bool empty() const;
     size_t stack_size() const;
 
+    // Number of cells on the return stack (frames of called functions). Zero when no function
+    // is active, so tests can check that returns leave the frames balanced.
+    size_t return_stack_size() const { return return_stack_.size(); }
+
     // Return stack operations.
     inline void push_return(Cell value) {
         return_stack_.push(value);

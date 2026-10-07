@@ -27,6 +27,11 @@ enum class Opcode {
     LABEL,
     GOTO,
     IF_NOT,
+    ERASE,
+    IF_SO,
+    IF_NOT_RETURN,
+    IF_SO_RETURN,
+    IF_THEN_ELSE,
     RETURN,
     HALT,
 };
