@@ -150,6 +150,21 @@ void ParseFunctionObject::plant_instruction(FunctionObject& func, const Instruct
         case Opcode::IF_NOT:
             plant_if_not(func, inst);
             break;
+        case Opcode::ERASE:
+            plant_erase(func, inst);
+            break;
+        case Opcode::IF_SO:
+            plant_if_so(func, inst);
+            break;
+        case Opcode::IF_NOT_RETURN:
+            plant_if_not_return(func, inst);
+            break;
+        case Opcode::IF_SO_RETURN:
+            plant_if_so_return(func, inst);
+            break;
+        case Opcode::IF_THEN_ELSE:
+            plant_if_then_else(func, inst);
+            break;
         case Opcode::RETURN:
         case Opcode::HALT:
             plant_return_halt(func, inst);
@@ -381,6 +396,55 @@ void ParseFunctionObject::plant_if_not(FunctionObject& func, const Instruction& 
     if (!inst.value.has_value()) {
         throw std::runtime_error("IF_NOT requires a value field");
     }
+    plant_jump_instruction(func, inst.value.value());
+}
+
+void ParseFunctionObject::plant_erase(FunctionObject& func, const Instruction& inst) {
+    if constexpr (TRACE_PLANT_INSTRUCTIONS) {
+        fmt::print("Plant: ERASE\n");
+    }
+    // No operands.
+}
+
+void ParseFunctionObject::plant_if_so(FunctionObject& func, const Instruction& inst) {
+    if constexpr (TRACE_PLANT_INSTRUCTIONS) {
+        fmt::print("Plant: IF_SO\n");
+    }
+
+    if (!inst.value.has_value()) {
+        throw std::runtime_error("IF_SO requires a value field");
+    }
+    plant_jump_instruction(func, inst.value.value());
+}
+
+void ParseFunctionObject::plant_if_not_return(FunctionObject& func, const Instruction& inst) {
+    if constexpr (TRACE_PLANT_INSTRUCTIONS) {
+        fmt::print("Plant: IF_NOT_RETURN\n");
+    }
+    // No operands.
+}
+
+void ParseFunctionObject::plant_if_so_return(FunctionObject& func, const Instruction& inst) {
+    if constexpr (TRACE_PLANT_INSTRUCTIONS) {
+        fmt::print("Plant: IF_SO_RETURN\n");
+    }
+    // No operands.
+}
+
+void ParseFunctionObject::plant_if_then_else(FunctionObject& func, const Instruction& inst) {
+    if constexpr (TRACE_PLANT_INSTRUCTIONS) {
+        fmt::print("Plant: IF_THEN_ELSE\n");
+    }
+
+    if (!inst.name.has_value()) {
+        throw std::runtime_error("IF_THEN_ELSE requires a name field");
+    }
+    if (!inst.value.has_value()) {
+        throw std::runtime_error("IF_THEN_ELSE requires a value field");
+    }
+    // name is the then-label, value is the else-label. Each plant_jump_instruction call
+    // reserves and (eventually) patches the offset relative to the cell after its own operand.
+    plant_jump_instruction(func, inst.name.value());
     plant_jump_instruction(func, inst.value.value());
 }
 

@@ -44,6 +44,11 @@ private:
     void plant_check_count_is_1(FunctionObject& func, const Instruction& inst);
     void plant_goto(FunctionObject& func, const Instruction& inst);
     void plant_if_not(FunctionObject& func, const Instruction& inst);
+    void plant_erase(FunctionObject& func, const Instruction& inst);
+    void plant_if_so(FunctionObject& func, const Instruction& inst);
+    void plant_if_not_return(FunctionObject& func, const Instruction& inst);
+    void plant_if_so_return(FunctionObject& func, const Instruction& inst);
+    void plant_if_then_else(FunctionObject& func, const Instruction& inst);
     void plant_return_halt(FunctionObject& func, const Instruction& inst);
     void plant_done(FunctionObject& func, const Instruction& inst);
 

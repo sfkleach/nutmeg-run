@@ -290,6 +290,20 @@ std::optional<std::string> MachineNames::sys_function_name(const void* function)
         }                                                                   \
     } while (0)
 
+// Shared by L_RETURN, L_IF_NOT_RETURN and L_IF_SO_RETURN: clean up the stack frame
+// ([return_address][func_obj][local_0]...[local_nlocals-1]) and set pc to the return
+// address. A macro, not a function, so L_RETURN's generated code is unchanged; a function
+// call here (even inlined at -O0) would also leave two RETURN entries in the instruction
+// log for an if.*.return that takes the return path, instead of one.
+#define PERFORM_RETURN()                                                   \
+    do {                                                                    \
+        Cell return_cell = pop_return();                                    \
+        Cell * func_obj = static_cast<Cell *>(pop_return().ptr);            \
+        int nlocals = heap_.get_function_nlocals(func_obj);                 \
+        pop_return_frame(nlocals);                                          \
+        pc = static_cast<Cell*>(return_cell.ptr);                           \
+    } while (0)
+
 // Key implementation constraint: This must be a SINGLE function handling both
 // initialization and execution phases. In C++, label addresses (&&label) are only
 // valid within the function where they are defined. We cannot capture labels in
@@ -331,6 +345,11 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
             {Opcode::CHECK_COUNT_IS_1, &&L_CHECK_COUNT_IS_1},
             {Opcode::GOTO, &&L_GOTO},
             {Opcode::IF_NOT, &&L_IF_NOT},
+            {Opcode::ERASE, &&L_ERASE},
+            {Opcode::IF_SO, &&L_IF_SO},
+            {Opcode::IF_NOT_RETURN, &&L_IF_NOT_RETURN},
+            {Opcode::IF_SO_RETURN, &&L_IF_SO_RETURN},
+            {Opcode::IF_THEN_ELSE, &&L_IF_THEN_ELSE},
             {Opcode::RETURN, &&L_RETURN},
             {Opcode::HALT, &&L_HALT},
             {Opcode::DONE, &&L_DONE},
@@ -603,22 +622,73 @@ void Machine::threaded_impl(std::vector<Cell>* code, bool init_mode) {
 
     L_RETURN: {
         LOG_INSTRUCTION_ENTRY("RETURN");
-        // Clean up stack frame: [return_address][func_obj][local_0]...[local_nlocals-1]
-
-        // Restore return address (raw).
-        Cell return_cell = pop_return();
-
-        // Pop the func_obj pointer (raw) and restore previous function context.
-        Cell * func_obj = static_cast<Cell *>(pop_return().ptr);
-
-        // Pop nlocals slots first.
-        // Get nlocals from current_function_.
-        int nlocals = heap_.get_function_nlocals(func_obj);
-        pop_return_frame(nlocals);
-
-        pc = static_cast<Cell*>(return_cell.ptr);
+        PERFORM_RETURN();
 
         // Continue execution at return address.
+        LOG_INSTRUCTION_EXIT();
+        goto *pc++->label_addr;
+    }
+
+    L_ERASE: {
+        LOG_INSTRUCTION_ENTRY("ERASE");
+        // Pop and discard the top of the operand stack. (The existing stack checks apply,
+        // so erasing an empty stack throws.)
+        operand_stack_.pop();
+        LOG_INSTRUCTION_EXIT();
+        goto *(pc++)->label_addr;
+    }
+
+    L_IF_SO: {
+        LOG_INSTRUCTION_ENTRY("IF_SO", OP_RAW);
+        // Mirror of L_IF_NOT: jump if the condition is not exactly false.
+        int64_t offset = (pc++)->i64;
+
+        Cell condition = pop();
+
+        if (condition.u64 != SPECIAL_FALSE.u64) {
+            pc += offset;
+        }
+
+        LOG_INSTRUCTION_EXIT();
+        goto *pc++->label_addr;
+    }
+
+    L_IF_NOT_RETURN: {
+        LOG_INSTRUCTION_ENTRY("IF_NOT_RETURN");
+        // No operands: pc already points at the next instruction either way.
+        Cell condition = pop();
+
+        if (condition.u64 == SPECIAL_FALSE.u64) {
+            PERFORM_RETURN();
+        }
+
+        LOG_INSTRUCTION_EXIT();
+        goto *pc++->label_addr;
+    }
+
+    L_IF_SO_RETURN: {
+        LOG_INSTRUCTION_ENTRY("IF_SO_RETURN");
+        Cell condition = pop();
+
+        if (condition.u64 != SPECIAL_FALSE.u64) {
+            PERFORM_RETURN();
+        }
+
+        LOG_INSTRUCTION_EXIT();
+        goto *pc++->label_addr;
+    }
+
+    L_IF_THEN_ELSE: {
+        LOG_INSTRUCTION_ENTRY("IF_THEN_ELSE", OP_RAW, OP_RAW);
+        // [then offset][else offset], each relative to the cell after its own operand:
+        // the then-target base is operands + 1, the else-target base is operands + 2.
+        Cell* operands = pc;
+        Cell condition = pop();
+
+        // "True" is "not exactly false" (consistent with IF_NOT/IF_SO).
+        pc = (condition.u64 == SPECIAL_FALSE.u64) ? operands + 2 + operands[1].i64
+                                                   : operands + 1 + operands[0].i64;
+
         LOG_INSTRUCTION_EXIT();
         goto *pc++->label_addr;
     }
@@ -724,5 +794,6 @@ Cell * Machine::LaunchInstruction(Cell *pc)
 
 #undef LOG_INSTRUCTION_ENTRY
 #undef LOG_INSTRUCTION_EXIT
+#undef PERFORM_RETURN
 
 } // namespace nutmeg
